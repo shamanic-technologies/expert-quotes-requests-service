@@ -35,7 +35,10 @@ export const featuredOpportunities = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     externalId: text("external_id").notNull(),
-    featuredQuestionId: integer("featured_question_id").notNull(),
+    // Nullable. Featured.com `/opportunities-list` never returns this field —
+    // only `/premium-question-list` does. Bronze keeps it nullable so the
+    // wider catalog ingests cleanly.
+    featuredQuestionId: integer("featured_question_id"),
     opportunityText: text("opportunity_text").notNull(),
     mediaOutlet: text("media_outlet"),
     source: text("source"),

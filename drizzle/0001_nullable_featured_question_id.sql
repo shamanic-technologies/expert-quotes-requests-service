@@ -1,0 +1,1 @@
+ALTER TABLE "featured_opportunities" ALTER COLUMN "featured_question_id" DROP NOT NULL;
