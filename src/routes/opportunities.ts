@@ -39,37 +39,20 @@ function safeParseDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function readQid(o: Record<string, unknown>): number | null {
-  const raw =
-    (o.featuredQuestionId as unknown) ??
-    (o.featured_question_id as unknown) ??
-    (o.questionId as unknown) ??
-    (o.question_id as unknown) ??
-    (o.id as unknown);
-  if (raw === null || raw === undefined) return null;
-  const n = typeof raw === "number" ? raw : Number(raw);
-  return Number.isInteger(n) ? n : null;
-}
-
-function readText(o: Record<string, unknown>): string | null {
-  const candidates = [
-    o.opportunity,
-    o.opportunity_text,
-    o.opportunityText,
-    o.question,
-    o.text,
-    o.body,
-  ];
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim().length > 0) return c;
-  }
-  return null;
-}
-
 function readStr(o: Record<string, unknown>, ...keys: string[]): string | null {
   for (const k of keys) {
     const v = o[k];
     if (typeof v === "string" && v.trim().length > 0) return v;
+  }
+  return null;
+}
+
+function readInt(o: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const k of keys) {
+    const raw = o[k];
+    if (raw === null || raw === undefined) continue;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (Number.isInteger(n)) return n;
   }
   return null;
 }
@@ -87,58 +70,69 @@ async function refreshFromFeatured(
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   const opps: FeaturedOpportunity[] = await client.listOpportunities();
   if (!Array.isArray(opps) || opps.length === 0) {
-    console.log(
-      "[expert-quotes-requests-service] Featured listOpportunities returned non-array or empty:",
-      JSON.stringify(opps).slice(0, 500)
-    );
     return { inserted: 0, updated: 0, skipped: 0 };
   }
 
-  // One-shot diagnostic log: first opp's keys + shape sample.
-  if (opps[0]) {
-    console.log(
-      "[expert-quotes-requests-service] Featured opp sample keys:",
-      Object.keys(opps[0] as Record<string, unknown>).join(",")
-    );
-  }
+  // Featured.com `/opportunities-list` shape (confirmed via JQS pre-EQRS
+  // bronze inspection 2026-05-28):
+  //   { opportunity, pitchUrl, mediaOutlet, source, deadline, createdAt }
+  // No `featuredQuestionId` (that field is only on /premium-question-list).
+  // `pitchUrl` is the natural unique key per opportunity.
+  // `deadline` / `createdAt` are non-ISO human strings — safeParseDate falls
+  // back to null when JS Date can't parse them.
 
   const usable: Array<{
-    qid: number;
+    externalId: string;
     text: string;
     mediaOutlet: string | null;
     source: string | null;
     pitchUrl: string | null;
     deadline: Date | null;
+    featuredQuestionId: number | null;
     raw: unknown;
   }> = [];
   let skipped = 0;
   for (const o of opps as unknown as Array<Record<string, unknown>>) {
-    const qid = readQid(o);
-    const text = readText(o);
-    if (qid === null || text === null) {
+    const text = readStr(o, "opportunity", "opportunity_text", "question", "text", "body");
+    const pitchUrl = readStr(o, "pitchUrl", "pitch_url", "url");
+    if (!text || !pitchUrl) {
       skipped++;
       continue;
     }
     usable.push({
-      qid,
+      externalId: pitchUrl,
       text,
+      pitchUrl,
       mediaOutlet: readStr(o, "mediaOutlet", "media_outlet", "outlet"),
       source: readStr(o, "source", "provider"),
-      pitchUrl: readStr(o, "pitchUrl", "pitch_url", "url"),
       deadline: readDate(o, "deadline", "expiresAt", "expires_at"),
+      featuredQuestionId: readInt(
+        o,
+        "featuredQuestionId",
+        "featured_question_id",
+        "questionId",
+        "question_id"
+      ),
       raw: o,
     });
   }
   if (usable.length === 0) {
     console.warn(
-      `[expert-quotes-requests-service] refresh: all ${skipped} Featured opps filtered out`
+      `[expert-quotes-requests-service] refresh: all ${skipped} Featured opps filtered out (missing opportunity text or pitchUrl)`
     );
     return { inserted: 0, updated: 0, skipped };
   }
 
-  const rows = usable.map((u) => ({
-    externalId: String(u.qid),
-    featuredQuestionId: u.qid,
+  // Dedupe by externalId within batch — Postgres errcode 21000 disallows
+  // VALUES list affecting the same conflict-target row twice.
+  const byExternal = new Map<string, (typeof usable)[number]>();
+  for (const u of usable) {
+    if (!byExternal.has(u.externalId)) byExternal.set(u.externalId, u);
+  }
+
+  const rows = Array.from(byExternal.values()).map((u) => ({
+    externalId: u.externalId,
+    featuredQuestionId: u.featuredQuestionId,
     opportunityText: u.text,
     mediaOutlet: u.mediaOutlet,
     source: u.source ?? "featured",

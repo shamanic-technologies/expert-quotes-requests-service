@@ -8,6 +8,13 @@
       "when": 1779962387886,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779980209144,
+      "tag": "0001_nullable_featured_question_id",
+      "breakpoints": true
     }
   ]
 }

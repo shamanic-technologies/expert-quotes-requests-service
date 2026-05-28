@@ -64,7 +64,8 @@
             "type": "string"
           },
           "featuredQuestionId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "opportunityText": {
             "type": "string"

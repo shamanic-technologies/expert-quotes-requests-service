@@ -49,7 +49,7 @@ export const FeaturedOpportunityRowSchema = z
   .object({
     id: z.string().uuid(),
     externalId: z.string(),
-    featuredQuestionId: z.number().int(),
+    featuredQuestionId: z.number().int().nullable(),
     opportunityText: z.string(),
     mediaOutlet: z.string().nullable(),
     source: z.string().nullable(),
