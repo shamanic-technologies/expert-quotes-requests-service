@@ -79,11 +79,10 @@ See `.env.example` for the full list. Key envs:
 |---|---|---|---|
 | `EXPERT_QUOTES_REQUESTS_SERVICE_DATABASE_URL` | yes | — | Neon connection string |
 | `EXPERT_QUOTES_REQUESTS_SERVICE_API_KEY` | yes | — | Inbound API key |
-| `KEY_SERVICE_URL` / `KEY_SERVICE_API_KEY` | optional | — | When set, Featured creds resolved via key-service. Falls back to `FEATURED_USERNAME` / `FEATURED_PASSWORD` env if 404. |
+| `KEY_SERVICE_URL` / `KEY_SERVICE_API_KEY` | yes | — | Featured creds resolved via key-service `featured-username` + `featured-password` platform keys (declared by dashboard at startup). No env-var fallback. |
 | `RUNS_SERVICE_URL` / `RUNS_SERVICE_API_KEY` | yes (prod) | — | Run tracking. Boot fails closed if missing in prod. |
 | `BRAND_SERVICE_URL` / `BRAND_SERVICE_API_KEY` | yes | — | For lazy Featured profile bootstrap (brand logo upload). |
 | `FEATURED_API_BASE_URL` | no | `https://featured.com/api/external-users` | Override for staging / test. |
-| `FEATURED_USERNAME` / `FEATURED_PASSWORD` | fallback only | — | Used when key-service `featured` provider not registered. |
 | `FEATURED_OPPORTUNITY_TTL_MS` | no | `300000` (5 min) | Bronze lazy-refresh TTL on `GET /orgs/featured/opportunities`. |
 | `PORT` | no | `3055` | |
 
