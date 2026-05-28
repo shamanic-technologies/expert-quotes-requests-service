@@ -39,38 +39,112 @@ function safeParseDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function readQid(o: Record<string, unknown>): number | null {
+  const raw =
+    (o.featuredQuestionId as unknown) ??
+    (o.featured_question_id as unknown) ??
+    (o.questionId as unknown) ??
+    (o.question_id as unknown) ??
+    (o.id as unknown);
+  if (raw === null || raw === undefined) return null;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isInteger(n) ? n : null;
+}
+
+function readText(o: Record<string, unknown>): string | null {
+  const candidates = [
+    o.opportunity,
+    o.opportunity_text,
+    o.opportunityText,
+    o.question,
+    o.text,
+    o.body,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) return c;
+  }
+  return null;
+}
+
+function readStr(o: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim().length > 0) return v;
+  }
+  return null;
+}
+
+function readDate(o: Record<string, unknown>, ...keys: string[]): Date | null {
+  for (const k of keys) {
+    const d = safeParseDate(o[k]);
+    if (d) return d;
+  }
+  return null;
+}
+
 async function refreshFromFeatured(
   client: FeaturedClient
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   const opps: FeaturedOpportunity[] = await client.listOpportunities();
-  if (opps.length === 0) return { inserted: 0, updated: 0, skipped: 0 };
+  if (!Array.isArray(opps) || opps.length === 0) {
+    console.log(
+      "[expert-quotes-requests-service] Featured listOpportunities returned non-array or empty:",
+      JSON.stringify(opps).slice(0, 500)
+    );
+    return { inserted: 0, updated: 0, skipped: 0 };
+  }
 
-  const usable: typeof opps = [];
+  // One-shot diagnostic log: first opp's keys + shape sample.
+  if (opps[0]) {
+    console.log(
+      "[expert-quotes-requests-service] Featured opp sample keys:",
+      Object.keys(opps[0] as Record<string, unknown>).join(",")
+    );
+  }
+
+  const usable: Array<{
+    qid: number;
+    text: string;
+    mediaOutlet: string | null;
+    source: string | null;
+    pitchUrl: string | null;
+    deadline: Date | null;
+    raw: unknown;
+  }> = [];
   let skipped = 0;
-  for (const o of opps) {
-    const qid =
-      typeof o.featuredQuestionId === "number"
-        ? o.featuredQuestionId
-        : Number(o.featuredQuestionId);
-    if (!Number.isInteger(qid) || !o.opportunity) {
+  for (const o of opps as unknown as Array<Record<string, unknown>>) {
+    const qid = readQid(o);
+    const text = readText(o);
+    if (qid === null || text === null) {
       skipped++;
       continue;
     }
-    usable.push({ ...o, featuredQuestionId: qid });
+    usable.push({
+      qid,
+      text,
+      mediaOutlet: readStr(o, "mediaOutlet", "media_outlet", "outlet"),
+      source: readStr(o, "source", "provider"),
+      pitchUrl: readStr(o, "pitchUrl", "pitch_url", "url"),
+      deadline: readDate(o, "deadline", "expiresAt", "expires_at"),
+      raw: o,
+    });
   }
   if (usable.length === 0) {
+    console.warn(
+      `[expert-quotes-requests-service] refresh: all ${skipped} Featured opps filtered out`
+    );
     return { inserted: 0, updated: 0, skipped };
   }
 
-  const rows = usable.map((o) => ({
-    externalId: String(o.featuredQuestionId),
-    featuredQuestionId: o.featuredQuestionId,
-    opportunityText: o.opportunity,
-    mediaOutlet: o.mediaOutlet ?? null,
-    source: o.source ?? "featured",
-    pitchUrl: o.pitchUrl ?? null,
-    deadline: safeParseDate(o.deadline),
-    raw: o,
+  const rows = usable.map((u) => ({
+    externalId: String(u.qid),
+    featuredQuestionId: u.qid,
+    opportunityText: u.text,
+    mediaOutlet: u.mediaOutlet,
+    source: u.source ?? "featured",
+    pitchUrl: u.pitchUrl,
+    deadline: u.deadline,
+    raw: u.raw,
   }));
 
   // ON CONFLICT (external_id) DO UPDATE — use xmax to distinguish insert vs update.
