@@ -33,6 +33,12 @@ export function _resetOpportunitiesState() {
   lastRefreshAt.clear();
 }
 
+function safeParseDate(value: unknown): Date | null {
+  if (!value || typeof value !== "string") return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 async function refreshFromFeatured(
   client: FeaturedClient
 ): Promise<{ inserted: number; updated: number }> {
@@ -46,7 +52,7 @@ async function refreshFromFeatured(
     mediaOutlet: o.mediaOutlet ?? null,
     source: o.source ?? "featured",
     pitchUrl: o.pitchUrl ?? null,
-    deadline: o.deadline ? new Date(o.deadline) : null,
+    deadline: safeParseDate(o.deadline),
     raw: o,
   }));
 
