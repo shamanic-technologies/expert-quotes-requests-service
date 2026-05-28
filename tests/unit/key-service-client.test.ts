@@ -4,6 +4,11 @@ import {
   KeyServiceUnavailableError,
 } from "../../src/lib/key-service-client.js";
 
+const TEST_CALLER = {
+  method: "GET",
+  path: "/orgs/featured/opportunities",
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -48,6 +53,7 @@ describe("getFeaturedCredentials (key-service)", () => {
 
     const creds = await getFeaturedCredentials(
       "00000000-0000-0000-0000-00000000000a",
+      TEST_CALLER,
       undefined,
       undefined,
       fetchImpl as unknown as typeof fetch
@@ -60,7 +66,10 @@ describe("getFeaturedCredentials (key-service)", () => {
     delete process.env.KEY_SERVICE_URL;
     delete process.env.KEY_SERVICE_API_KEY;
     await expect(
-      getFeaturedCredentials("00000000-0000-0000-0000-00000000000a")
+      getFeaturedCredentials(
+        "00000000-0000-0000-0000-00000000000a",
+        TEST_CALLER
+      )
     ).rejects.toBeInstanceOf(KeyServiceUnavailableError);
   });
 
@@ -71,6 +80,7 @@ describe("getFeaturedCredentials (key-service)", () => {
     await expect(
       getFeaturedCredentials(
         "00000000-0000-0000-0000-00000000000a",
+        TEST_CALLER,
         undefined,
         undefined,
         fetchImpl as unknown as typeof fetch
@@ -78,13 +88,11 @@ describe("getFeaturedCredentials (key-service)", () => {
     ).rejects.toBeInstanceOf(KeyServiceUnavailableError);
   });
 
-  it("forwards identity headers (x-org-id, x-user-id, x-run-id)", async () => {
+  it("forwards X-Caller-* headers + identity headers", async () => {
     const observed: Array<Record<string, string>> = [];
     const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
       observed.push(init.headers as Record<string, string>);
-      const key = url.endsWith("/featured-username/decrypt")
-        ? "u"
-        : "p";
+      const key = url.endsWith("/featured-username/decrypt") ? "u" : "p";
       return jsonResponse({
         provider: key,
         key,
@@ -94,6 +102,7 @@ describe("getFeaturedCredentials (key-service)", () => {
 
     await getFeaturedCredentials(
       "00000000-0000-0000-0000-00000000000a",
+      { method: "POST", path: "/orgs/featured/answers" },
       "00000000-0000-0000-0000-0000000000aa",
       "00000000-0000-0000-0000-0000000000bb",
       fetchImpl as unknown as typeof fetch
@@ -104,6 +113,9 @@ describe("getFeaturedCredentials (key-service)", () => {
       "x-user-id": "00000000-0000-0000-0000-0000000000aa",
       "x-run-id": "00000000-0000-0000-0000-0000000000bb",
       "x-api-key": "test-key-service-api-key",
+      "X-Caller-Service": "expert-quotes-requests-service",
+      "X-Caller-Method": "POST",
+      "X-Caller-Path": "/orgs/featured/answers",
     });
   });
 
@@ -114,6 +126,7 @@ describe("getFeaturedCredentials (key-service)", () => {
     await expect(
       getFeaturedCredentials(
         "00000000-0000-0000-0000-00000000000a",
+        TEST_CALLER,
         undefined,
         undefined,
         fetchImpl as unknown as typeof fetch

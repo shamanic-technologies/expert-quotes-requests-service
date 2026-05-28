@@ -14,9 +14,15 @@ interface DecryptResponse {
   userId?: string;
 }
 
+export interface CallerContext {
+  method: string;
+  path: string;
+}
+
 async function fetchDecryptedKey(
   provider: string,
   orgId: string,
+  caller: CallerContext,
   userId: string | undefined,
   runId: string | undefined,
   fetchImpl: typeof fetch
@@ -32,7 +38,9 @@ async function fetchDecryptedKey(
   const headers: Record<string, string> = {
     "x-api-key": KEY_SERVICE_API_KEY,
     "x-org-id": orgId,
-    "x-caller-service": "expert-quotes-requests-service",
+    "X-Caller-Service": "expert-quotes-requests-service",
+    "X-Caller-Method": caller.method,
+    "X-Caller-Path": caller.path,
   };
   if (userId) headers["x-user-id"] = userId;
   if (runId) headers["x-run-id"] = runId;
@@ -40,7 +48,7 @@ async function fetchDecryptedKey(
   let response: Response;
   try {
     response = await fetchImpl(
-      `${KEY_SERVICE_URL}/keys/${provider}/decrypt`,
+      `${KEY_SERVICE_URL}/keys/${encodeURIComponent(provider)}/decrypt`,
       { method: "GET", headers }
     );
   } catch (err) {
@@ -72,13 +80,28 @@ async function fetchDecryptedKey(
  */
 export async function getFeaturedCredentials(
   orgId: string,
+  caller: CallerContext,
   userId?: string,
   runId?: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<FeaturedCredentials> {
   const [username, password] = await Promise.all([
-    fetchDecryptedKey("featured-username", orgId, userId, runId, fetchImpl),
-    fetchDecryptedKey("featured-password", orgId, userId, runId, fetchImpl),
+    fetchDecryptedKey(
+      "featured-username",
+      orgId,
+      caller,
+      userId,
+      runId,
+      fetchImpl
+    ),
+    fetchDecryptedKey(
+      "featured-password",
+      orgId,
+      caller,
+      userId,
+      runId,
+      fetchImpl
+    ),
   ]);
   return { username, password };
 }

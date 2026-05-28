@@ -76,10 +76,11 @@ export function createProfilesRouter(deps: ProfilesDeps = {}): Router {
     const userId = req.userId;
     const runId = req.runId;
     const { brandId } = parsed.data;
+    const caller = { method: "POST", path: "/orgs/featured/profiles" };
 
     let credentials: FeaturedCredentials;
     try {
-      credentials = await getFeaturedCredentials(orgId, userId, runId);
+      credentials = await getFeaturedCredentials(orgId, caller, userId, runId);
     } catch (err) {
       const name = (err as Error).name;
       const message = (err as Error).message;
@@ -146,9 +147,13 @@ export function createProfilesRouter(deps: ProfilesDeps = {}): Router {
         return;
       }
 
+      const caller = {
+        method: "POST",
+        path: "/orgs/featured/profiles/:profileId/deactivate",
+      };
       let credentials: FeaturedCredentials;
       try {
-        credentials = await getFeaturedCredentials(orgId, userId, runId);
+        credentials = await getFeaturedCredentials(orgId, caller, userId, runId);
       } catch (err) {
         const name = (err as Error).name;
         const message = (err as Error).message;
