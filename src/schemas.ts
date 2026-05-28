@@ -111,6 +111,7 @@ const RefreshResponseSchema = z
     refreshed: z.boolean(),
     inserted: z.number().int(),
     updated: z.number().int(),
+    skipped: z.number().int(),
   })
   .openapi("OpportunityRefreshResponse");
 

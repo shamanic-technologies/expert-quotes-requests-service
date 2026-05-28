@@ -41,11 +41,28 @@ function safeParseDate(value: unknown): Date | null {
 
 async function refreshFromFeatured(
   client: FeaturedClient
-): Promise<{ inserted: number; updated: number }> {
+): Promise<{ inserted: number; updated: number; skipped: number }> {
   const opps: FeaturedOpportunity[] = await client.listOpportunities();
-  if (opps.length === 0) return { inserted: 0, updated: 0 };
+  if (opps.length === 0) return { inserted: 0, updated: 0, skipped: 0 };
 
-  const rows = opps.map((o) => ({
+  const usable: typeof opps = [];
+  let skipped = 0;
+  for (const o of opps) {
+    const qid =
+      typeof o.featuredQuestionId === "number"
+        ? o.featuredQuestionId
+        : Number(o.featuredQuestionId);
+    if (!Number.isInteger(qid) || !o.opportunity) {
+      skipped++;
+      continue;
+    }
+    usable.push({ ...o, featuredQuestionId: qid });
+  }
+  if (usable.length === 0) {
+    return { inserted: 0, updated: 0, skipped };
+  }
+
+  const rows = usable.map((o) => ({
     externalId: String(o.featuredQuestionId),
     featuredQuestionId: o.featuredQuestionId,
     opportunityText: o.opportunity,
@@ -84,7 +101,12 @@ async function refreshFromFeatured(
     if (r.inserted) inserted++;
     else updated++;
   }
-  return { inserted, updated };
+  if (skipped > 0) {
+    console.warn(
+      `[expert-quotes-requests-service] refresh skipped ${skipped} Featured opps missing featuredQuestionId or opportunity text`
+    );
+  }
+  return { inserted, updated, skipped };
 }
 
 export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router {
