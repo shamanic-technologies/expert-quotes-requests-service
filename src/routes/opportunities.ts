@@ -95,10 +95,11 @@ export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router 
     const orgId = req.orgId!;
     const userId = req.userId;
     const runId = req.runId;
+    const caller = { method: "GET", path: "/orgs/featured/opportunities" };
 
     let credentials: FeaturedCredentials;
     try {
-      credentials = await getFeaturedCredentials(orgId, userId, runId);
+      credentials = await getFeaturedCredentials(orgId, caller, userId, runId);
     } catch (err) {
       const name = (err as Error).name;
       const message = (err as Error).message;
@@ -162,10 +163,14 @@ export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router 
     const orgId = req.orgId!;
     const userId = req.userId;
     const runId = req.runId;
+    const caller = {
+      method: "POST",
+      path: "/orgs/featured/opportunities/refresh",
+    };
 
     let credentials: FeaturedCredentials;
     try {
-      credentials = await getFeaturedCredentials(orgId, userId, runId);
+      credentials = await getFeaturedCredentials(orgId, caller, userId, runId);
     } catch (err) {
       const name = (err as Error).name;
       const message = (err as Error).message;
