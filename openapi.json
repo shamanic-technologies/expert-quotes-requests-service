@@ -130,12 +130,16 @@
           },
           "updated": {
             "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
           }
         },
         "required": [
           "refreshed",
           "inserted",
-          "updated"
+          "updated",
+          "skipped"
         ]
       },
       "SubmitAnswerResponse": {
