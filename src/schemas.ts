@@ -66,6 +66,14 @@ export const FeaturedOpportunityRowSchema = z
 export const OpportunitiesListQuerySchema = z.object({
   since: z.string().datetime().optional(),
   limit: z.coerce.number().int().positive().max(500).optional(),
+  brandId: z
+    .string()
+    .uuid()
+    .optional()
+    .openapi({
+      description:
+        "When set, switches to per-brand delivery mode: returns only opportunities never delivered to this (org, brand) and records them as delivered. Consecutive calls return disjoint sets; exhausted → empty array. `nextSince` is null in this mode (the delivery ledger is the cursor). When absent, the legacy org-scoped `since` timestamp cursor is used.",
+    }),
 });
 
 const OpportunitiesListResponseSchema = z
@@ -132,6 +140,58 @@ registry.registerPath({
   },
 });
 
+// ─── POST /orgs/featured/opportunities/submission-status ────────────────────
+
+export const SubmissionStatusRequestSchema = z
+  .object({
+    brandId: z.string().uuid(),
+    externalIds: z.array(z.string()).min(1).max(500),
+  })
+  .openapi("SubmissionStatusRequest");
+
+const SubmissionStatusEntrySchema = z
+  .object({
+    externalId: z.string(),
+    submitted: z.boolean(),
+    lastStatus: z.string().nullable(),
+    submittedAt: z.string().nullable(),
+  })
+  .openapi("SubmissionStatusEntry");
+
+const SubmissionStatusResponseSchema = z
+  .object({ statuses: z.array(SubmissionStatusEntrySchema) })
+  .openapi("SubmissionStatusResponse");
+
+registry.registerPath({
+  method: "post",
+  path: "/orgs/featured/opportunities/submission-status",
+  summary:
+    "Authoritative submitted-status for a set of opportunities, per (org, brand)",
+  description:
+    "Returns, for each requested `externalId`, whether it has been submitted-successfully to Featured for this (org, brand). `submitted` is true only when a ledger row with status `submitted` exists; `error`/pending/absent → `submitted: false` (still offerable, AC4). Keyed on the atomic single `brandId` + the same `externalId` the opportunities feed exposes.",
+  request: {
+    headers: orgHeaders,
+    body: {
+      content: {
+        "application/json": { schema: SubmissionStatusRequestSchema },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Per-opportunity submitted-status",
+      content: {
+        "application/json": { schema: SubmissionStatusResponseSchema },
+      },
+    },
+    400: {
+      description: "Bad request",
+      content: { "application/json": { schema: ErrorResponseSchema } },
+    },
+  },
+});
+
 // ─── POST /orgs/featured/answers ────────────────────────────────────────────
 
 export const SubmitAnswerRequestSchema = z
@@ -139,6 +199,13 @@ export const SubmitAnswerRequestSchema = z
     brandId: z.string().uuid(),
     featuredQuestionId: z.number().int(),
     answer: z.string().min(100).max(2500),
+    externalId: z
+      .string()
+      .optional()
+      .openapi({
+        description:
+          "Opportunity identity (= the `externalId` from the opportunities feed) this submission is for. Persisted to the submission ledger so the authoritative submitted-status lookup can key on it.",
+      }),
   })
   .openapi("SubmitAnswerRequest");
 

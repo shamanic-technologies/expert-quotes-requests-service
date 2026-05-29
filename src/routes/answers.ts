@@ -58,7 +58,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
       res.status(400).json({ error: parsed.error.message });
       return;
     }
-    const { brandId, featuredQuestionId, answer } = parsed.data;
+    const { brandId, featuredQuestionId, answer, externalId } = parsed.data;
     const orgId = req.orgId!;
     const userId = req.userId;
     const runId = req.runId;
@@ -136,6 +136,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
         cacheKey,
         orgId,
         brandId,
+        externalId: externalId ?? null,
         featuredQuestionId,
         featuredProfileId: profile.featuredProfileId,
         status: "error",
@@ -152,6 +153,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
       cacheKey,
       orgId,
       brandId,
+      externalId: externalId ?? null,
       featuredQuestionId,
       featuredProfileId: profile.featuredProfileId,
       status: "submitted",

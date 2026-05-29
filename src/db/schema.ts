@@ -59,6 +59,42 @@ export const featuredOpportunities = pgTable(
 );
 
 /**
+ * Per-(org, brand) delivery ledger. Records which bronze opportunities have
+ * already been served to a given brand so consecutive pulls return disjoint
+ * sets and a polling consumer terminates (returns `[]` once exhausted).
+ *
+ * Identity is keyed on the SINGLE atomic `brandId` (not a brand tuple) — per
+ * the global identity-keying rule: scoring is collective per tuple, but
+ * dedup / served / cursor is atomic per single brand. `externalId` matches the
+ * bronze `featured_opportunities.external_id` (the identity JQS already holds).
+ *
+ * This replaces the org-scoped timestamp cursor for per-brand delivery: the
+ * batch ingest stamps every row of one insert with the same `first_seen_at`
+ * (single `defaultNow()`), so a timestamp high-water-mark cannot page reliably.
+ * An explicit ledger is the minimal robust primitive.
+ */
+export const featuredDeliveries = pgTable(
+  "featured_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id").notNull(),
+    brandId: uuid("brand_id").notNull(),
+    externalId: text("external_id").notNull(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_featured_deliveries_org_brand_external").on(
+      table.orgId,
+      table.brandId,
+      table.externalId
+    ),
+    index("idx_featured_deliveries_org_brand").on(table.orgId, table.brandId),
+  ]
+);
+
+/**
  * (org_id, brand_id) → Featured profileId. Mirrors JQS schema exactly.
  */
 export const featuredProfiles = pgTable(
@@ -94,6 +130,12 @@ export const featuredSubmissions = pgTable(
     cacheKey: text("cache_key").notNull(),
     orgId: uuid("org_id").notNull(),
     brandId: uuid("brand_id").notNull(),
+    // Opportunity identity (= featured_opportunities.external_id, i.e. pitchUrl)
+    // the submission was made for. Nullable: pre-feature rows have none, and
+    // not every caller supplies it yet. Drives the authoritative per-(org,
+    // brand, opportunity) submitted-status lookup that consumers read to
+    // exclude already-pitched opportunities and re-offer failed ones.
+    externalId: text("external_id"),
     featuredQuestionId: integer("featured_question_id").notNull(),
     featuredProfileId: integer("featured_profile_id").notNull(),
     status: text("status").notNull(),
@@ -107,6 +149,11 @@ export const featuredSubmissions = pgTable(
       table.submittedAt
     ),
     index("idx_featured_submissions_org").on(table.orgId, table.submittedAt),
+    index("idx_featured_submissions_org_brand_external").on(
+      table.orgId,
+      table.brandId,
+      table.externalId
+    ),
   ]
 );
 
@@ -115,5 +162,7 @@ export type FeaturedOpportunity = typeof featuredOpportunities.$inferSelect;
 export type NewFeaturedOpportunity = typeof featuredOpportunities.$inferInsert;
 export type FeaturedProfile = typeof featuredProfiles.$inferSelect;
 export type NewFeaturedProfile = typeof featuredProfiles.$inferInsert;
+export type FeaturedDelivery = typeof featuredDeliveries.$inferSelect;
+export type NewFeaturedDelivery = typeof featuredDeliveries.$inferInsert;
 export type FeaturedSubmission = typeof featuredSubmissions.$inferSelect;
 export type NewFeaturedSubmission = typeof featuredSubmissions.$inferInsert;

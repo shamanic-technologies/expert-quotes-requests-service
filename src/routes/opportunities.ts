@@ -1,7 +1,20 @@
 import { Router } from "express";
-import { and, gt, desc, sql as drizzleSql } from "drizzle-orm";
+import {
+  and,
+  gt,
+  eq,
+  desc,
+  inArray,
+  notExists,
+  sql as drizzleSql,
+} from "drizzle-orm";
 import { db } from "../db/index.js";
-import { featuredOpportunities } from "../db/schema.js";
+import {
+  featuredOpportunities,
+  featuredDeliveries,
+  featuredSubmissions,
+  type FeaturedOpportunity as FeaturedOpportunityRow,
+} from "../db/schema.js";
 import {
   FeaturedClient,
   type FeaturedClientOptions,
@@ -10,7 +23,10 @@ import {
 } from "../lib/featured-client.js";
 import { getFeaturedCredentials } from "../lib/key-service-client.js";
 import { config } from "../config.js";
-import { OpportunitiesListQuerySchema } from "../schemas.js";
+import {
+  OpportunitiesListQuerySchema,
+  SubmissionStatusRequestSchema,
+} from "../schemas.js";
 
 export interface OpportunitiesDeps {
   buildClient?: (
@@ -177,6 +193,149 @@ async function refreshFromFeatured(
   return { inserted, updated, skipped };
 }
 
+function toItem(r: FeaturedOpportunityRow) {
+  return {
+    id: r.id,
+    externalId: r.externalId,
+    featuredQuestionId: r.featuredQuestionId,
+    opportunityText: r.opportunityText,
+    mediaOutlet: r.mediaOutlet,
+    source: r.source,
+    pitchUrl: r.pitchUrl,
+    deadline: r.deadline ? r.deadline.toISOString() : null,
+    raw: r.raw,
+    firstSeenAt: r.firstSeenAt.toISOString(),
+    lastSeenAt: r.lastSeenAt.toISOString(),
+  };
+}
+
+/**
+ * Per-brand delivery mode: return bronze opportunities never delivered to this
+ * (org, brand), newest-first, up to `limit`, and atomically record them as
+ * delivered. Identity is the atomic single `brandId`. Consecutive calls return
+ * disjoint sets; once exhausted the result is `[]` so a polling consumer
+ * terminates.
+ *
+ * Selection + recording run in one transaction; the INSERT ... ON CONFLICT DO
+ * NOTHING ... RETURNING returns only rows THIS call won, so concurrent callers
+ * for the same (org, brand) never double-serve a row.
+ */
+async function selectAndRecordDelivery(
+  orgId: string,
+  brandId: string,
+  limit: number
+): Promise<FeaturedOpportunityRow[]> {
+  return db.transaction(async (tx) => {
+    const candidates = await tx
+      .select()
+      .from(featuredOpportunities)
+      .where(
+        notExists(
+          tx
+            .select({ one: drizzleSql`1` })
+            .from(featuredDeliveries)
+            .where(
+              and(
+                eq(featuredDeliveries.orgId, orgId),
+                eq(featuredDeliveries.brandId, brandId),
+                eq(featuredDeliveries.externalId, featuredOpportunities.externalId)
+              )
+            )
+        )
+      )
+      .orderBy(desc(featuredOpportunities.firstSeenAt))
+      .limit(limit);
+
+    if (candidates.length === 0) return [];
+
+    const inserted = await tx
+      .insert(featuredDeliveries)
+      .values(
+        candidates.map((c) => ({ orgId, brandId, externalId: c.externalId }))
+      )
+      .onConflictDoNothing()
+      .returning({ externalId: featuredDeliveries.externalId });
+
+    const won = new Set(inserted.map((r) => r.externalId));
+    return candidates.filter((c) => won.has(c.externalId));
+  });
+}
+
+export interface SubmissionStatusEntry {
+  externalId: string;
+  submitted: boolean;
+  lastStatus: string | null;
+  submittedAt: string | null;
+}
+
+/**
+ * Authoritative per-(org, brand, opportunity) submitted-status. `submitted` is
+ * true ONLY when a ledger row with `status = 'submitted'` exists; `error` /
+ * pending / absent → `submitted = false` so the opportunity stays offerable
+ * (failed submits are NOT served). Keyed on the atomic single `brandId` +
+ * `externalId` — the same identity the opportunities feed exposes.
+ */
+async function getSubmissionStatuses(
+  orgId: string,
+  brandId: string,
+  externalIds: string[]
+): Promise<SubmissionStatusEntry[]> {
+  const rows = externalIds.length
+    ? await db
+        .select({
+          externalId: featuredSubmissions.externalId,
+          status: featuredSubmissions.status,
+          submittedAt: featuredSubmissions.submittedAt,
+        })
+        .from(featuredSubmissions)
+        .where(
+          and(
+            eq(featuredSubmissions.orgId, orgId),
+            eq(featuredSubmissions.brandId, brandId),
+            inArray(featuredSubmissions.externalId, externalIds)
+          )
+        )
+    : [];
+
+  const byExternal = new Map<
+    string,
+    { submitted: boolean; lastStatus: string | null; latestAt: Date | null; submittedAt: Date | null }
+  >();
+  for (const r of rows) {
+    if (!r.externalId) continue;
+    const agg =
+      byExternal.get(r.externalId) ??
+      { submitted: false, lastStatus: null, latestAt: null, submittedAt: null };
+    if (agg.latestAt === null || r.submittedAt > agg.latestAt) {
+      agg.latestAt = r.submittedAt;
+      agg.lastStatus = r.status;
+    }
+    if (r.status === "submitted") {
+      agg.submitted = true;
+      if (agg.submittedAt === null || r.submittedAt > agg.submittedAt) {
+        agg.submittedAt = r.submittedAt;
+      }
+    }
+    byExternal.set(r.externalId, agg);
+  }
+
+  // One entry per REQUESTED externalId, deduped, preserving request order.
+  const seen = new Set<string>();
+  const result: SubmissionStatusEntry[] = [];
+  for (const externalId of externalIds) {
+    if (seen.has(externalId)) continue;
+    seen.add(externalId);
+    const agg = byExternal.get(externalId);
+    result.push({
+      externalId,
+      submitted: agg?.submitted ?? false,
+      lastStatus: agg?.lastStatus ?? null,
+      submittedAt: agg?.submittedAt ? agg.submittedAt.toISOString() : null,
+    });
+  }
+  return result;
+}
+
 export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router {
   const router = Router();
   const buildClient = deps.buildClient ?? defaultBuildClient;
@@ -187,7 +346,7 @@ export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router 
       res.status(400).json({ error: parsed.error.message });
       return;
     }
-    const { since, limit } = parsed.data;
+    const { since, limit, brandId } = parsed.data;
     const orgId = req.orgId!;
     const userId = req.userId;
     const runId = req.runId;
@@ -224,6 +383,17 @@ export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router 
       }
     }
 
+    // Per-brand delivery mode: return only opportunities never delivered to
+    // this (org, brand) and record them as delivered. Disjoint across calls;
+    // exhausted → []. `nextSince` is null here — the delivery ledger is the
+    // cursor, not the timestamp.
+    if (brandId) {
+      const rows = await selectAndRecordDelivery(orgId, brandId, limit ?? 100);
+      res.json({ items: rows.map(toItem), nextSince: null, refreshed });
+      return;
+    }
+
+    // Legacy org-scoped timestamp cursor (no brandId): unchanged behavior.
     const conditions = [];
     if (since) conditions.push(gt(featuredOpportunities.firstSeenAt, new Date(since)));
     const rows = await db
@@ -233,19 +403,7 @@ export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router 
       .orderBy(desc(featuredOpportunities.firstSeenAt))
       .limit(limit ?? 100);
 
-    const items = rows.map((r) => ({
-      id: r.id,
-      externalId: r.externalId,
-      featuredQuestionId: r.featuredQuestionId,
-      opportunityText: r.opportunityText,
-      mediaOutlet: r.mediaOutlet,
-      source: r.source,
-      pitchUrl: r.pitchUrl,
-      deadline: r.deadline ? r.deadline.toISOString() : null,
-      raw: r.raw,
-      firstSeenAt: r.firstSeenAt.toISOString(),
-      lastSeenAt: r.lastSeenAt.toISOString(),
-    }));
+    const items = rows.map(toItem);
 
     const nextSince =
       items.length > 0
@@ -292,6 +450,24 @@ export function createOpportunitiesRouter(deps: OpportunitiesDeps = {}): Router 
 
     res.json({ refreshed: true, ...stats });
   });
+
+  // Authoritative submitted-status for a set of opportunities, keyed on the
+  // atomic single brandId + externalId. Lets a consumer exclude already-pitched
+  // opportunities and re-offer failed ones. Pure DB lookup — no Featured call.
+  router.post(
+    "/orgs/featured/opportunities/submission-status",
+    async (req, res) => {
+      const parsed = SubmissionStatusRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.message });
+        return;
+      }
+      const { brandId, externalIds } = parsed.data;
+      const orgId = req.orgId!;
+      const statuses = await getSubmissionStatuses(orgId, brandId, externalIds);
+      res.json({ statuses });
+    }
+  );
 
   return router;
 }
