@@ -10,3 +10,5 @@ process.env.BRAND_SERVICE_URL = "http://brand.test";
 process.env.BRAND_SERVICE_API_KEY = "test-brand-key";
 process.env.RUNS_SERVICE_URL = "http://runs.test";
 process.env.RUNS_SERVICE_API_KEY = "test-runs-key";
+process.env.BILLING_SERVICE_URL = "http://billing.test";
+process.env.BILLING_SERVICE_API_KEY = "test-billing-key";

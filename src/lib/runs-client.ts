@@ -76,3 +76,103 @@ export async function closeRun(
     );
   }
 }
+
+export interface AddCostsItem {
+  costName: string;
+  costSource: "platform" | "org";
+  quantity: number;
+  status?: "provisioned" | "actual" | "cancelled";
+  idempotencyKey?: string;
+}
+
+export interface CostIdentity {
+  orgId: string;
+  userId?: string;
+  brandId?: string;
+  campaignId?: string;
+  featureSlug?: string;
+  workflowSlug?: string;
+}
+
+export interface CostRow {
+  id: string;
+  runId: string;
+  costName: string;
+  costSource: "platform" | "org";
+  quantity: string;
+  unitCostInUsdCents: string;
+  totalCostInUsdCents: string;
+  status: "actual" | "provisioned" | "cancelled";
+  idempotencyKey: string | null;
+  createdAt: string;
+}
+
+function costIdentityHeaders(
+  apiKey: string,
+  runId: string,
+  identity: CostIdentity
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "x-org-id": identity.orgId,
+    "x-run-id": runId,
+  };
+  if (identity.userId) headers["x-user-id"] = identity.userId;
+  if (identity.brandId) headers["x-brand-id"] = identity.brandId;
+  if (identity.campaignId) headers["x-campaign-id"] = identity.campaignId;
+  if (identity.featureSlug) headers["x-feature-slug"] = identity.featureSlug;
+  if (identity.workflowSlug) headers["x-workflow-slug"] = identity.workflowSlug;
+  return headers;
+}
+
+export async function addCosts(
+  runId: string,
+  items: AddCostsItem[],
+  identity: CostIdentity,
+  fetchImpl: typeof fetch = fetch
+): Promise<CostRow[]> {
+  const { url, apiKey } = getRunsConfig();
+
+  const response = await fetchImpl(`${url}/v1/runs/${runId}/costs`, {
+    method: "POST",
+    headers: costIdentityHeaders(apiKey, runId, identity),
+    body: JSON.stringify({ items }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `Runs-service POST /v1/runs/${runId}/costs failed (${response.status}): ${body}`
+    );
+  }
+
+  const data = (await response.json()) as { costs: CostRow[] };
+  return data.costs;
+}
+
+export async function updateCostStatus(
+  runId: string,
+  costId: string,
+  status: "actual" | "cancelled",
+  identity: CostIdentity,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  const { url, apiKey } = getRunsConfig();
+
+  const response = await fetchImpl(
+    `${url}/v1/runs/${runId}/costs/${costId}`,
+    {
+      method: "PATCH",
+      headers: costIdentityHeaders(apiKey, runId, identity),
+      body: JSON.stringify({ status }),
+    }
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `Runs-service PATCH /v1/runs/${runId}/costs/${costId} failed (${response.status}): ${body}`
+    );
+  }
+}
