@@ -219,12 +219,23 @@ const SubmitAnswerResponseSchema = z
   })
   .openapi("SubmitAnswerResponse");
 
+// 402 body carries the balance shortfall so the caller can surface it. Distinct
+// from the bare {error} ErrorResponse — consumers (journalists-quotes-service
+// /reply) read balance_cents / required_cents.
+const InsufficientCreditResponseSchema = z
+  .object({
+    error: z.string(),
+    balance_cents: z.number(),
+    required_cents: z.number(),
+  })
+  .openapi("InsufficientCreditResponse");
+
 registry.registerPath({
   method: "post",
   path: "/orgs/featured/answers",
   summary: "Submit a pitch answer to a Featured question",
   description:
-    "Auto-ensures (org, brand) Featured profile via brand-service logo lookup. Rate-limit-aware (rolling 100 / hour per Featured account).",
+    "Auto-ensures (org, brand) Featured profile via brand-service logo lookup. Rate-limit-aware (rolling 100 / hour per Featured account). Declares the `featured-api-pitch-submit` cost (provision → authorize → execute → actualize); the credit gate returns 402 when the org cannot afford the submit.",
   request: {
     headers: orgHeaders,
     body: {
@@ -241,8 +252,16 @@ registry.registerPath({
       description: "Bad request",
       content: { "application/json": { schema: ErrorResponseSchema } },
     },
+    402: {
+      description:
+        "Insufficient credit for the featured pitch submit (credit gate). The provisioned cost is cancelled; no submit is attempted.",
+      content: {
+        "application/json": { schema: InsufficientCreditResponseSchema },
+      },
+    },
     502: {
-      description: "Upstream unavailable",
+      description:
+        "Upstream unavailable — key-service, brand-service, billing-service, runs-service (cost provision), or Featured.com. The provisioned cost is cancelled.",
       content: { "application/json": { schema: ErrorResponseSchema } },
     },
   },

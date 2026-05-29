@@ -66,4 +66,25 @@ describe("openapi spec coverage", () => {
     expect(submitAnswer.properties.answer.minLength).toBe(100);
     expect(submitAnswer.properties.answer.maxLength).toBe(2500);
   });
+
+  it("submit-answer documents 402 insufficient-credit with balance/required cents", () => {
+    const post = document.paths?.["/orgs/featured/answers"]?.post as {
+      responses: Record<string, unknown>;
+    };
+    // Runtime returns 402 on credit-gate (answers.ts) — contract must publish it.
+    expect(Object.keys(post.responses)).toEqual(
+      expect.arrayContaining(["200", "400", "402", "502"])
+    );
+    const credit = document.components?.schemas
+      ?.InsufficientCreditResponse as {
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(Object.keys(credit.properties)).toEqual(
+      expect.arrayContaining(["error", "balance_cents", "required_cents"])
+    );
+    expect(credit.required ?? []).toEqual(
+      expect.arrayContaining(["error", "balance_cents", "required_cents"])
+    );
+  });
 });

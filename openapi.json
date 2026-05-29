@@ -231,6 +231,25 @@
           "status"
         ]
       },
+      "InsufficientCreditResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "balance_cents": {
+            "type": "number"
+          },
+          "required_cents": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "error",
+          "balance_cents",
+          "required_cents"
+        ]
+      },
       "SubmitAnswerRequest": {
         "type": "object",
         "properties": {
@@ -777,7 +796,7 @@
     "/orgs/featured/answers": {
       "post": {
         "summary": "Submit a pitch answer to a Featured question",
-        "description": "Auto-ensures (org, brand) Featured profile via brand-service logo lookup. Rate-limit-aware (rolling 100 / hour per Featured account).",
+        "description": "Auto-ensures (org, brand) Featured profile via brand-service logo lookup. Rate-limit-aware (rolling 100 / hour per Featured account). Declares the `featured-api-pitch-submit` cost (provision → authorize → execute → actualize); the credit gate returns 402 when the org cannot afford the submit.",
         "parameters": [
           {
             "schema": {
@@ -879,8 +898,18 @@
               }
             }
           },
+          "402": {
+            "description": "Insufficient credit for the featured pitch submit (credit gate). The provisioned cost is cancelled; no submit is attempted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsufficientCreditResponse"
+                }
+              }
+            }
+          },
           "502": {
-            "description": "Upstream unavailable",
+            "description": "Upstream unavailable — key-service, brand-service, billing-service, runs-service (cost provision), or Featured.com. The provisioned cost is cancelled.",
             "content": {
               "application/json": {
                 "schema": {
