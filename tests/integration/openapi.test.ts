@@ -24,7 +24,7 @@ describe("openapi spec coverage", () => {
     expect(paths).toContain("/orgs/featured/submissions");
   });
 
-  it("opportunities cursor query schema exposes `since` and `limit`", () => {
+  it("opportunities cursor query schema exposes `since`, `limit` and `brandId`", () => {
     const spec = document.paths?.["/orgs/featured/opportunities"]?.get;
     expect(spec).toBeDefined();
     const params = (spec as { parameters?: Array<{ name: string }> })
@@ -32,6 +32,30 @@ describe("openapi spec coverage", () => {
     const paramNames = (params ?? []).map((p) => p.name);
     expect(paramNames).toContain("since");
     expect(paramNames).toContain("limit");
+    expect(paramNames).toContain("brandId");
+  });
+
+  it("registers the submission-status endpoint with brandId + externalIds body", () => {
+    const paths = Object.keys(document.paths ?? {});
+    expect(paths).toContain("/orgs/featured/opportunities/submission-status");
+    const reqSchema = document.components?.schemas?.SubmissionStatusRequest as {
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(Object.keys(reqSchema.properties)).toEqual(
+      expect.arrayContaining(["brandId", "externalIds"])
+    );
+  });
+
+  it("submit-answer schema exposes optional externalId for status keying", () => {
+    const schemas = document.components?.schemas ?? {};
+    const submitAnswer = schemas.SubmitAnswerRequest as {
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(submitAnswer.properties).toHaveProperty("externalId");
+    // additive, non-breaking: externalId must NOT be required
+    expect(submitAnswer.required ?? []).not.toContain("externalId");
   });
 
   it("submit-answer schema enforces 100..2500 char answer length", () => {

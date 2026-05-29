@@ -143,6 +143,66 @@
           "skipped"
         ]
       },
+      "SubmissionStatusResponse": {
+        "type": "object",
+        "properties": {
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionStatusEntry"
+            }
+          }
+        },
+        "required": [
+          "statuses"
+        ]
+      },
+      "SubmissionStatusEntry": {
+        "type": "object",
+        "properties": {
+          "externalId": {
+            "type": "string"
+          },
+          "submitted": {
+            "type": "boolean"
+          },
+          "lastStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "submittedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "externalId",
+          "submitted",
+          "lastStatus",
+          "submittedAt"
+        ]
+      },
+      "SubmissionStatusRequest": {
+        "type": "object",
+        "properties": {
+          "brandId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "brandId",
+          "externalIds"
+        ]
+      },
       "SubmitAnswerResponse": {
         "type": "object",
         "properties": {
@@ -185,6 +245,10 @@
             "type": "string",
             "minLength": 100,
             "maxLength": 2500
+          },
+          "externalId": {
+            "type": "string",
+            "description": "Opportunity identity (= the `externalId` from the opportunities feed) this submission is for. Persisted to the submission ledger so the authoritative submitted-status lookup can key on it."
           }
         },
         "required": [
@@ -393,6 +457,17 @@
           },
           {
             "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "When set, switches to per-brand delivery mode: returns only opportunities never delivered to this (org, brand) and records them as delivered. Consecutive calls return disjoint sets; exhausted → empty array. `nextSince` is null in this mode (the delivery ledger is the cursor). When absent, the legacy org-scoped `since` timestamp cursor is used."
+            },
+            "required": false,
+            "description": "When set, switches to per-brand delivery mode: returns only opportunities never delivered to this (org, brand) and records them as delivered. Consecutive calls return disjoint sets; exhausted → empty array. `nextSince` is null in this mode (the delivery ledger is the cursor). When absent, the legacy org-scoped `since` timestamp cursor is used.",
+            "name": "brandId",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "required": true,
@@ -580,6 +655,114 @@
           },
           "502": {
             "description": "Featured.com unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/featured/opportunities/submission-status": {
+      "post": {
+        "summary": "Authoritative submitted-status for a set of opportunities, per (org, brand)",
+        "description": "Returns, for each requested `externalId`, whether it has been submitted-successfully to Featured for this (org, brand). `submitted` is true only when a ledger row with status `submitted` exists; `error`/pending/absent → `submitted: false` (still offerable, AC4). Keyed on the atomic single `brandId` + the same `externalId` the opportunities feed exposes.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "x-api-key",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "x-org-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-user-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-run-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-campaign-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "x-feature-slug",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "x-workflow-slug",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmissionStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-opportunity submitted-status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
             "content": {
               "application/json": {
                 "schema": {

@@ -18,7 +18,7 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 
 - `src/schemas.ts` — Zod + OpenAPI registry (single source of truth)
 - `src/routes/health.ts` — `GET /health`
-- `src/routes/opportunities.ts` — `GET /orgs/featured/opportunities`, `POST /orgs/featured/opportunities/refresh`
+- `src/routes/opportunities.ts` — `GET /orgs/featured/opportunities` (org-scoped `since` cursor OR per-brand delivery mode via `?brandId=`), `POST /orgs/featured/opportunities/refresh`, `POST /orgs/featured/opportunities/submission-status` (authoritative per-(org, brand, opportunity) submitted-status)
 - `src/routes/answers.ts` — `POST /orgs/featured/answers`
 - `src/routes/profiles.ts` — `GET/POST /orgs/featured/profiles`, `POST /orgs/featured/profiles/:id/deactivate`
 - `src/routes/premium-questions.ts` — `GET /orgs/featured/premium-questions`
@@ -29,7 +29,7 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 - `src/lib/brand-client.ts` — `getBrand` + `getBrandLogo` from brand-service
 - `src/lib/key-service-client.ts` — `getFeaturedCredentials` via key-service `featured` provider (env-fallback when provider not yet registered)
 - `src/lib/runs-client.ts` — Mandatory run tracking. Fails 502 if runs-service down.
-- `src/db/schema.ts` — Drizzle schema (`featured_opportunities` bronze + `featured_profiles` + `featured_submissions` ledger + `featured_jwt` forward-compatible cache table)
+- `src/db/schema.ts` — Drizzle schema (`featured_opportunities` bronze + `featured_profiles` + `featured_submissions` ledger + `featured_deliveries` per-brand delivery ledger + `featured_jwt` forward-compatible cache table)
 - `openapi.json` — Auto-generated. NEVER edit by hand.
 
 ## Operational invariants
@@ -37,6 +37,8 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 - **Single-replica deploy.** JWT cache + rate-limit window are in-memory (`Map` + array in `src/lib/featured-client.ts`). The `featured_jwt` table exists as forward-compatible storage but is currently unused at runtime. When Railway is scaled to >1 replica, move both stores to DB rows + serialize refresh via `SELECT … FOR UPDATE`.
 - **Bronze is append-only.** `featured_opportunities` writes via `ON CONFLICT (external_id) DO UPDATE` — re-ingest is idempotent, `first_seen_at` never changes, `last_seen_at` always advances.
 - **Cursor is timestamp-based** (`?since=<ISO>` filtered against `first_seen_at`). Response includes `nextSince = max(first_seen_at)` for chaining. Provider-agnostic — works as-is for HARO / SOS / Qwoted once added.
+- **Per-brand delivery is ledger-based, keyed on the atomic single `brandId`.** `GET /orgs/featured/opportunities?brandId=<uuid>` returns only opportunities never recorded in `featured_deliveries` for that `(org_id, brand_id)`, newest-first, and records them as delivered in the same transaction (`INSERT … ON CONFLICT DO NOTHING … RETURNING` ⇒ concurrency-safe, never double-served). Consecutive calls return disjoint sets; exhausted → `[]` (a polling consumer terminates). `nextSince` is `null` in this mode — the ledger is the cursor. A timestamp high-water-mark cannot be used here: batch ingest stamps every row of one insert with the same `first_seen_at` (single `defaultNow()`). Identity is the single brand, never a brand tuple (co-brand grouping is the consumer's concern). The `?brandId=` mode is additive — omitting it preserves the legacy `since` behavior byte-for-byte.
+- **Submitted-status is authoritative and lives here.** `POST /orgs/featured/opportunities/submission-status` `{ brandId, externalIds[] }` returns, per opportunity, `{ externalId, submitted, lastStatus, submittedAt }`. `submitted` is true ONLY when a `featured_submissions` row with `status='submitted'` exists for `(org, brand, externalId)`; `error` / pending / absent ⇒ `submitted:false` (still offerable — failed submits are NOT served). EQRS owns the Featured submit, so it is the source of truth; consumers ASK rather than reconstruct locally. Keyed on the same `externalId` the opportunities feed exposes + the atomic single `brandId`. The submit (`POST /orgs/featured/answers`) accepts an additive optional `externalId` that is persisted to the ledger to enable this lookup.
 - **No business logic.** Scoring, HITL queue, silver clustering all live in `journalists-quotes-service`. This service is a stateless pass-through for Featured.com mechanics + bronze persistence.
 - **No silent fallbacks.** Featured.com errors propagate as `502`. Key-service unavailable propagates as `502`. Runs-service unavailable propagates as `502`. Brand-service logo missing throws (caller sees `502`).
 
@@ -59,6 +61,7 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 | `GET /premium-question-list` | `GET /orgs/featured/premium-questions` |
 | `GET /submitted?page=N` | `GET /orgs/featured/submissions?page=N` |
 | `POST /add-seats` | NOT EXPOSED (v0.1 scope) |
+| _(none — derived from local ledger)_ | `POST /orgs/featured/opportunities/submission-status` (authoritative per-(org, brand, opportunity) submitted-status; no Featured call) |
 
 ## Rate limit
 
@@ -68,7 +71,8 @@ Featured.com enforces 100 submitted answers per Featured account per rolling 1-h
 
 - `featured_opportunities` — bronze, keyed by `external_id`, idempotent re-ingest.
 - `featured_profiles` — `(org_id, brand_id) → featured_profile_id` mapping.
-- `featured_submissions` — append-only ledger of submission attempts (drives ledger-based rate-limit + audit trail).
+- `featured_submissions` — append-only ledger of submission attempts (drives ledger-based rate-limit + audit trail + authoritative submitted-status). `external_id` (nullable) ties a submission to the opportunity identity the feed exposes.
+- `featured_deliveries` — per-`(org_id, brand_id)` delivery ledger, unique on `(org_id, brand_id, external_id)`. Drives per-brand "give me only what this brand hasn't seen" + loop termination. Keyed on the atomic single `brandId`.
 - `featured_jwt` — forward-compatible JWT cache table (unused at runtime today; populate when scaling to multi-replica).
 
 ## Configuration
