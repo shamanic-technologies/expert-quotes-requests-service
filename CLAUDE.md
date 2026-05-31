@@ -100,6 +100,11 @@ See `.env.example` for the full list. Key envs:
 | `FEATURED_OPPORTUNITY_TTL_MS` | no | `300000` (5 min) | Bronze lazy-refresh TTL — shared by `GET /orgs/featured/opportunities` AND `GET /orgs/featured/premium-questions`. |
 | `PORT` | no | `3055` | |
 
+## Local testing & prod probing
+
+- **Integration tests need a local Postgres** — the default test URL is `postgresql://mock:mock@localhost:5432/mock` and NO globalSetup runs migrations. One-time: `psql -d postgres -c "CREATE ROLE mock LOGIN PASSWORD 'mock' SUPERUSER"` + `CREATE DATABASE mock OWNER mock`, then `EXPERT_QUOTES_REQUESTS_SERVICE_DATABASE_URL='postgresql://mock:mock@localhost:5432/mock' pnpm db:migrate`. Unit tests need no DB. **There is NO test CI** (only the non-gating `migrate.yml`) — run tests locally before shipping. Known pre-existing failure: `tests/integration/per-brand-delivery.test.ts › persists externalId` 502s locally because that test doesn't stub the runs/billing cost-path fetches (`stubKeyService` throws on non-decrypt URLs); unrelated to profile logic.
+- **Probing prod Featured (private API).** Featured creds are platform keys in key-service (encrypted at rest); `key-service.railway.internal` is reachable only from inside Railway. To run a live probe: `railway link -p "Distribute.you" -e production -s expert-quotes-requests-service`, then ship the script INTO the container — `railway ssh` already wraps the command in `sh -c`, so pass the pipeline as ONE arg and feed the script via stdin: `B64=$(base64 < probe.mjs | tr -d '\n'); railway ssh -- "echo $B64 | base64 -d | node"`. Inside the container `node` reaches both `key-service.railway.internal` (decrypt requires `x-api-key` + `x-org-id` + **`x-user-id`**) and `featured.com`. Non-mutating prod smoke for the profile path: `POST localhost:$PORT/orgs/featured/profiles` with the repro org/brand (resolves + caches, no Featured write, no pitch submit).
+
 ## Triage flow
 
 - Hotfix → `release.sh hotfix` (when added) → `main` → tag.
