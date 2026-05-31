@@ -21,22 +21,24 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 - `src/routes/opportunities.ts` — `GET /orgs/featured/opportunities` (org-scoped `since` cursor OR per-brand delivery mode via `?brandId=`), `POST /orgs/featured/opportunities/refresh`, `POST /orgs/featured/opportunities/submission-status` (authoritative per-(org, brand, opportunity) submitted-status)
 - `src/routes/answers.ts` — `POST /orgs/featured/answers`
 - `src/routes/profiles.ts` — `GET/POST /orgs/featured/profiles`, `POST /orgs/featured/profiles/:id/deactivate`
-- `src/routes/premium-questions.ts` — `GET /orgs/featured/premium-questions`
+- `src/routes/premium-questions.ts` — `GET /orgs/featured/premium-questions` (bronze-backed, lazy-refresh + outlet normalization), `POST /orgs/featured/premium-questions/refresh` (force)
 - `src/routes/submissions.ts` — `GET /orgs/featured/submissions`
 - `src/middleware/auth.ts` — `apiKeyAuth` + `requireOrgId` + `withRunTracking` (per shared `service-architecture` convention)
 - `src/lib/featured-client.ts` — Featured.com HTTP wrapper (JWT cache, rolling-window rate limit, 8 endpoints)
 - `src/lib/featured-profile-bootstrap.ts` — Lazy `(org, brand) → Featured profileId` creation via brand-service logo
 - `src/lib/brand-client.ts` — `getBrand` + `getBrandLogo` from brand-service
 - `src/lib/key-service-client.ts` — `getFeaturedCredentials` via key-service `featured` provider (env-fallback when provider not yet registered)
+- `src/lib/featured-normalize.ts` — shared field normalizers (`readStr` / `readInt` / `readDate` + `MEDIA_OUTLET_KEYS`). BOTH the opportunities and premium ingestion paths normalize the outlet through the one shared `MEDIA_OUTLET_KEYS` list, so outlet coverage is symmetric by construction (no feed silently drops an alias the other handles).
 - `src/lib/runs-client.ts` — Mandatory run tracking + cost declaration (`addCosts` / `updateCostStatus`). Fails 502 if runs-service down.
 - `src/lib/billing-client.ts` — `authorizeCredit` (credit gate for the metered Featured pitch submit).
-- `src/db/schema.ts` — Drizzle schema (`featured_opportunities` bronze + `featured_profiles` + `featured_submissions` ledger + `featured_deliveries` per-brand delivery ledger + `featured_jwt` forward-compatible cache table)
+- `src/db/schema.ts` — Drizzle schema (`featured_opportunities` bronze + `featured_premium_questions` bronze + `featured_profiles` + `featured_submissions` ledger + `featured_deliveries` per-brand delivery ledger + `featured_jwt` forward-compatible cache table)
 - `openapi.json` — Auto-generated. NEVER edit by hand.
 
 ## Operational invariants
 
 - **Single-replica deploy.** JWT cache + rate-limit window are in-memory (`Map` + array in `src/lib/featured-client.ts`). The `featured_jwt` table exists as forward-compatible storage but is currently unused at runtime. When Railway is scaled to >1 replica, move both stores to DB rows + serialize refresh via `SELECT … FOR UPDATE`.
 - **Bronze is append-only.** `featured_opportunities` writes via `ON CONFLICT (external_id) DO UPDATE` — re-ingest is idempotent, `first_seen_at` never changes, `last_seen_at` always advances.
+- **Both Featured feeds have bronze; outlet normalization is shared.** `featured_premium_questions` is the bronze for `/premium-question-list` (keyed on `featured_question_id`, idempotent `ON CONFLICT … DO UPDATE`, raw payload persisted). `GET /orgs/featured/premium-questions` lazy-refreshes into it (same TTL knob as opportunities) and serves the normalized rows; it is NOT a verbatim pass-through. The `mediaOutlet` field on BOTH feeds is normalized through the shared `MEDIA_OUTLET_KEYS` aliases (`mediaOutlet`/`media_outlet`/`outlet`/`publication`/`publisher`) — never dropped because a feed only looked for one key. `mediaOutlet` is `null` ONLY when Featured exposes no outlet under any alias (never fabricated). Persisting raw keeps the "does Featured expose the outlet?" question answerable from stored data and recoverable for downstream backfill. The premium served set is what `journalists-quotes-service` ingests to silver; its `mediaOutlet` flows straight through (JQS reads `q.mediaOutlet`).
 - **Cursor is timestamp-based** (`?since=<ISO>` filtered against `first_seen_at`). Response includes `nextSince = max(first_seen_at)` for chaining. Provider-agnostic — works as-is for HARO / SOS / Qwoted once added.
 - **Per-brand delivery is ledger-based, keyed on the atomic single `brandId`.** `GET /orgs/featured/opportunities?brandId=<uuid>` returns only opportunities never recorded in `featured_deliveries` for that `(org_id, brand_id)`, newest-first, and records them as delivered in the same transaction (`INSERT … ON CONFLICT DO NOTHING … RETURNING` ⇒ concurrency-safe, never double-served). Consecutive calls return disjoint sets; exhausted → `[]` (a polling consumer terminates). `nextSince` is `null` in this mode — the ledger is the cursor. A timestamp high-water-mark cannot be used here: batch ingest stamps every row of one insert with the same `first_seen_at` (single `defaultNow()`). Identity is the single brand, never a brand tuple (co-brand grouping is the consumer's concern). The `?brandId=` mode is additive — omitting it preserves the legacy `since` behavior byte-for-byte.
 - **Submitted-status is authoritative and lives here.** `POST /orgs/featured/opportunities/submission-status` `{ brandId, externalIds[] }` returns, per opportunity, `{ externalId, submitted, lastStatus, submittedAt }`. `submitted` is true ONLY when a `featured_submissions` row with `status='submitted'` exists for `(org, brand, externalId)`; `error` / pending / absent ⇒ `submitted:false` (still offerable — failed submits are NOT served). EQRS owns the Featured submit, so it is the source of truth; consumers ASK rather than reconstruct locally. Keyed on the same `externalId` the opportunities feed exposes + the atomic single `brandId`. The submit (`POST /orgs/featured/answers`) accepts an additive optional `externalId` that is persisted to the ledger to enable this lookup.
@@ -61,7 +63,7 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 | `POST /add-profile` | `POST /orgs/featured/profiles` + auto-bootstrap on submit |
 | `GET /profiles` | (internal) |
 | `POST /deactivate-profile` | `POST /orgs/featured/profiles/:profileId/deactivate` |
-| `GET /premium-question-list` | `GET /orgs/featured/premium-questions` |
+| `GET /premium-question-list` | `GET /orgs/featured/premium-questions` (bronze-backed, lazy-refresh, TTL = `FEATURED_OPPORTUNITY_TTL_MS`, outlet normalized) + `POST /orgs/featured/premium-questions/refresh` (force) |
 | `GET /submitted?page=N` | `GET /orgs/featured/submissions?page=N` |
 | `POST /add-seats` | NOT EXPOSED (v0.1 scope) |
 | _(none — derived from local ledger)_ | `POST /orgs/featured/opportunities/submission-status` (authoritative per-(org, brand, opportunity) submitted-status; no Featured call) |
@@ -72,7 +74,8 @@ Featured.com enforces 100 submitted answers per Featured account per rolling 1-h
 
 ## Storage tables
 
-- `featured_opportunities` — bronze, keyed by `external_id`, idempotent re-ingest.
+- `featured_opportunities` — bronze (the `/opportunities-list` feed), keyed by `external_id` (= `pitchUrl`), idempotent re-ingest. Has `media_outlet` but no `featured_question_id` (not API-submittable).
+- `featured_premium_questions` — bronze (the `/premium-question-list` feed — the only API-answerable one), keyed by `featured_question_id`, idempotent re-ingest. `media_outlet` normalized at ingest; `raw` persisted. This is the feed `journalists-quotes-service` ingests to silver (`external_id` there = `featured-premium-${featuredQuestionId}`).
 - `featured_profiles` — `(org_id, brand_id) → featured_profile_id` mapping.
 - `featured_submissions` — append-only ledger of submission attempts (drives ledger-based rate-limit + audit trail + authoritative submitted-status). `external_id` (nullable) ties a submission to the opportunity identity the feed exposes.
 - `featured_deliveries` — per-`(org_id, brand_id)` delivery ledger, unique on `(org_id, brand_id, external_id)`. Drives per-brand "give me only what this brand hasn't seen" + loop termination. Keyed on the atomic single `brandId`.
@@ -90,7 +93,7 @@ See `.env.example` for the full list. Key envs:
 | `RUNS_SERVICE_URL` / `RUNS_SERVICE_API_KEY` | yes (prod) | — | Run tracking. Boot fails closed if missing in prod. |
 | `BRAND_SERVICE_URL` / `BRAND_SERVICE_API_KEY` | yes | — | For lazy Featured profile bootstrap (brand logo upload). |
 | `FEATURED_API_BASE_URL` | no | `https://featured.com/api/external-users` | Override for staging / test. |
-| `FEATURED_OPPORTUNITY_TTL_MS` | no | `300000` (5 min) | Bronze lazy-refresh TTL on `GET /orgs/featured/opportunities`. |
+| `FEATURED_OPPORTUNITY_TTL_MS` | no | `300000` (5 min) | Bronze lazy-refresh TTL — shared by `GET /orgs/featured/opportunities` AND `GET /orgs/featured/premium-questions`. |
 | `PORT` | no | `3055` | |
 
 ## Triage flow
