@@ -366,34 +366,75 @@ registry.registerPath({
 
 // ─── GET /orgs/featured/premium-questions ───────────────────────────────────
 
+// Bronze-backed: `mediaOutlet` (and the other optional fields) are normalized at
+// ingest and served nullable — `null` when Featured's premium feed exposes no
+// value under any known alias (never fabricated).
 const PremiumQuestionSchema = z
   .object({
     featuredQuestionId: z.number().int(),
     question: z.string(),
-    source: z.string().optional(),
-    mediaOutlet: z.string().optional(),
-    pitchUrl: z.string().optional(),
-    createdAt: z.string().optional(),
-    deadline: z.string().optional(),
+    source: z.string().nullable(),
+    mediaOutlet: z.string().nullable(),
+    pitchUrl: z.string().nullable(),
+    createdAt: z.string().nullable(),
+    deadline: z.string().nullable(),
   })
-  .passthrough()
   .openapi("PremiumQuestion");
 
 const PremiumQuestionsResponseSchema = z
-  .object({ questions: z.array(PremiumQuestionSchema) })
+  .object({
+    questions: z.array(PremiumQuestionSchema),
+    refreshed: z.boolean(),
+  })
   .openapi("PremiumQuestionsResponse");
 
 registry.registerPath({
   method: "get",
   path: "/orgs/featured/premium-questions",
-  summary: "List Featured premium questions (pass-through)",
+  summary: "List Featured premium questions (bronze-backed, lazy-refresh)",
+  description:
+    "Lazy-refreshes from Featured `/premium-question-list` if last refresh > FEATURED_OPPORTUNITY_TTL_MS, persisting the raw payload to bronze and normalizing `mediaOutlet` through the shared outlet aliases. Returns the full currently-answerable premium set (no limit). `mediaOutlet` is `null` only when Featured exposes no outlet under any known key.",
   request: { headers: orgHeaders },
   responses: {
     200: {
-      description: "Premium questions",
+      description: "Premium questions + refresh flag",
       content: {
         "application/json": { schema: PremiumQuestionsResponseSchema },
       },
+    },
+    502: {
+      description: "Featured.com unavailable",
+      content: { "application/json": { schema: ErrorResponseSchema } },
+    },
+  },
+});
+
+// ─── POST /orgs/featured/premium-questions/refresh ──────────────────────────
+
+const PremiumRefreshResponseSchema = z
+  .object({
+    refreshed: z.boolean(),
+    inserted: z.number().int(),
+    updated: z.number().int(),
+    skipped: z.number().int(),
+  })
+  .openapi("PremiumQuestionRefreshResponse");
+
+registry.registerPath({
+  method: "post",
+  path: "/orgs/featured/premium-questions/refresh",
+  summary: "Force-refresh premium questions from Featured (bypass TTL)",
+  request: { headers: orgHeaders },
+  responses: {
+    200: {
+      description: "Refresh stats",
+      content: {
+        "application/json": { schema: PremiumRefreshResponseSchema },
+      },
+    },
+    502: {
+      description: "Featured.com unavailable",
+      content: { "application/json": { schema: ErrorResponseSchema } },
     },
   },
 });

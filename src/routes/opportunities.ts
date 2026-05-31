@@ -27,6 +27,12 @@ import {
   OpportunitiesListQuerySchema,
   SubmissionStatusRequestSchema,
 } from "../schemas.js";
+import {
+  readStr,
+  readInt,
+  readDate,
+  MEDIA_OUTLET_KEYS,
+} from "../lib/featured-normalize.js";
 
 export interface OpportunitiesDeps {
   buildClient?: (
@@ -47,38 +53,6 @@ const lastRefreshAt = new Map<string, number>();
 
 export function _resetOpportunitiesState() {
   lastRefreshAt.clear();
-}
-
-function safeParseDate(value: unknown): Date | null {
-  if (!value || typeof value !== "string") return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function readStr(o: Record<string, unknown>, ...keys: string[]): string | null {
-  for (const k of keys) {
-    const v = o[k];
-    if (typeof v === "string" && v.trim().length > 0) return v;
-  }
-  return null;
-}
-
-function readInt(o: Record<string, unknown>, ...keys: string[]): number | null {
-  for (const k of keys) {
-    const raw = o[k];
-    if (raw === null || raw === undefined) continue;
-    const n = typeof raw === "number" ? raw : Number(raw);
-    if (Number.isInteger(n)) return n;
-  }
-  return null;
-}
-
-function readDate(o: Record<string, unknown>, ...keys: string[]): Date | null {
-  for (const k of keys) {
-    const d = safeParseDate(o[k]);
-    if (d) return d;
-  }
-  return null;
 }
 
 async function refreshFromFeatured(
@@ -119,7 +93,7 @@ async function refreshFromFeatured(
       externalId: pitchUrl,
       text,
       pitchUrl,
-      mediaOutlet: readStr(o, "mediaOutlet", "media_outlet", "outlet"),
+      mediaOutlet: readStr(o, ...MEDIA_OUTLET_KEYS),
       source: readStr(o, "source", "provider"),
       deadline: readDate(o, "deadline", "expiresAt", "expires_at"),
       featuredQuestionId: readInt(

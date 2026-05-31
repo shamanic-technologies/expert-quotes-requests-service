@@ -369,10 +369,14 @@
             "items": {
               "$ref": "#/components/schemas/PremiumQuestion"
             }
+          },
+          "refreshed": {
+            "type": "boolean"
           }
         },
         "required": [
-          "questions"
+          "questions",
+          "refreshed"
         ]
       },
       "PremiumQuestion": {
@@ -385,28 +389,58 @@
             "type": "string"
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "mediaOutlet": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "pitchUrl": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "deadline": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
           "featuredQuestionId",
-          "question"
-        ],
-        "additionalProperties": {
-          "nullable": true
-        }
+          "question",
+          "source",
+          "mediaOutlet",
+          "pitchUrl",
+          "createdAt",
+          "deadline"
+        ]
+      },
+      "PremiumQuestionRefreshResponse": {
+        "type": "object",
+        "properties": {
+          "refreshed": {
+            "type": "boolean"
+          },
+          "inserted": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "refreshed",
+          "inserted",
+          "updated",
+          "skipped"
+        ]
       },
       "SubmissionsResponse": {
         "type": "object",
@@ -1230,7 +1264,8 @@
     },
     "/orgs/featured/premium-questions": {
       "get": {
-        "summary": "List Featured premium questions (pass-through)",
+        "summary": "List Featured premium questions (bronze-backed, lazy-refresh)",
+        "description": "Lazy-refreshes from Featured `/premium-question-list` if last refresh > FEATURED_OPPORTUNITY_TTL_MS, persisting the raw payload to bronze and normalizing `mediaOutlet` through the shared outlet aliases. Returns the full currently-answerable premium set (no limit). `mediaOutlet` is `null` only when Featured exposes no outlet under any known key.",
         "parameters": [
           {
             "schema": {
@@ -1303,11 +1338,118 @@
         ],
         "responses": {
           "200": {
-            "description": "Premium questions",
+            "description": "Premium questions + refresh flag",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PremiumQuestionsResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Featured.com unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/featured/premium-questions/refresh": {
+      "post": {
+        "summary": "Force-refresh premium questions from Featured (bypass TTL)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "x-api-key",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "x-org-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-user-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-run-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-campaign-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "x-feature-slug",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "x-workflow-slug",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refresh stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumQuestionRefreshResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Featured.com unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

@@ -12,7 +12,7 @@ describe("openapi spec coverage", () => {
     },
   });
 
-  it("registers all 8 routes", () => {
+  it("registers all routes", () => {
     const paths = Object.keys(document.paths ?? {});
     expect(paths).toContain("/health");
     expect(paths).toContain("/orgs/featured/opportunities");
@@ -21,7 +21,16 @@ describe("openapi spec coverage", () => {
     expect(paths).toContain("/orgs/featured/profiles");
     expect(paths).toContain("/orgs/featured/profiles/{profileId}/deactivate");
     expect(paths).toContain("/orgs/featured/premium-questions");
+    expect(paths).toContain("/orgs/featured/premium-questions/refresh");
     expect(paths).toContain("/orgs/featured/submissions");
+  });
+
+  it("premium-question schema serves mediaOutlet as nullable (normalized, never fabricated)", () => {
+    const schema = document.components?.schemas?.PremiumQuestion as {
+      properties: Record<string, { nullable?: boolean }>;
+    };
+    expect(schema.properties).toHaveProperty("mediaOutlet");
+    expect(schema.properties.mediaOutlet.nullable).toBe(true);
   });
 
   it("opportunities cursor query schema exposes `since`, `limit` and `brandId`", () => {
