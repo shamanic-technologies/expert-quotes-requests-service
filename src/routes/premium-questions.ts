@@ -17,7 +17,7 @@ import {
   readStr,
   readInt,
   readDate,
-  MEDIA_OUTLET_KEYS,
+  deriveOutlet,
 } from "../lib/featured-normalize.js";
 
 export interface PremiumQuestionsDeps {
@@ -90,10 +90,14 @@ async function refreshPremiumFromFeatured(
     usable.push({
       featuredQuestionId,
       questionText: text,
-      mediaOutlet: readStr(q, ...MEDIA_OUTLET_KEYS),
+      // Featured `/premium-question-list` carries NO outlet field — derive it
+      // from the declared source-site URL (`sourceUrl`). `pitchUrl`/`deadline`
+      // arrive as `publicLink`/`closeDate` on this feed (the opportunities feed
+      // uses different keys); list both so neither feed silently drops them.
+      mediaOutlet: deriveOutlet(q),
       source: readStr(q, "source", "provider"),
-      pitchUrl: readStr(q, "pitchUrl", "pitch_url", "url"),
-      deadline: readDate(q, "deadline", "expiresAt", "expires_at"),
+      pitchUrl: readStr(q, "publicLink", "pitchUrl", "pitch_url", "url"),
+      deadline: readDate(q, "closeDate", "deadline", "expiresAt", "expires_at"),
       raw: q,
     });
   }
@@ -165,7 +169,7 @@ function toPremiumItem(r: FeaturedPremiumQuestionRow) {
     source: r.source,
     mediaOutlet: r.mediaOutlet,
     pitchUrl: r.pitchUrl,
-    createdAt: readStr(rawObj, "createdAt", "created_at"),
+    createdAt: readStr(rawObj, "createdAt", "created_at", "openDate"),
     deadline: r.deadline ? r.deadline.toISOString() : null,
   };
 }
