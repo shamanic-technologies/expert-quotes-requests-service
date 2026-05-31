@@ -31,7 +31,7 @@ import {
   readStr,
   readInt,
   readDate,
-  MEDIA_OUTLET_KEYS,
+  deriveOutlet,
 } from "../lib/featured-normalize.js";
 
 export interface OpportunitiesDeps {
@@ -93,7 +93,7 @@ async function refreshFromFeatured(
       externalId: pitchUrl,
       text,
       pitchUrl,
-      mediaOutlet: readStr(o, ...MEDIA_OUTLET_KEYS),
+      mediaOutlet: deriveOutlet(o),
       source: readStr(o, "source", "provider"),
       deadline: readDate(o, "deadline", "expiresAt", "expires_at"),
       featuredQuestionId: readInt(

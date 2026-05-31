@@ -36,14 +36,31 @@ const PREMIUM_S1 = [
   },
 ];
 
-// S2: Featured exposes NO outlet under any known alias.
-const PREMIUM_S2 = [
+// Unrecoverable: no outlet field AND no sourceUrl (e.g. an expired premium row).
+const PREMIUM_NO_SOURCE = [
   {
     featuredQuestionId: 201,
-    question: "Premium with no outlet field at all.",
-    source: "featured",
-    pitchUrl: "https://featured.com/q/201",
-    createdAt: "2026-05-22T10:00:00.000Z",
+    question: "Premium with neither outlet nor source url.",
+    attribution: "Unknown",
+  },
+];
+
+// The REAL Featured `/premium-question-list` shape (prod, 2026-05-31): no outlet
+// field, but a 100%-present `sourceUrl` (the outlet site) + `publicLink` (pitch)
+// + `closeDate`/`openDate`. `attribution` is junk ("Unknown"/"DoFollow").
+const PREMIUM_REAL = [
+  {
+    featuredQuestionId: 301,
+    question: "Looking for a tech hiring expert.",
+    sourceUrl: "https://www.dice.com",
+    publicLink: "https://featured.com/q/301/answer",
+    attribution: "DoFollow",
+    categories: ["tech"],
+    domainAuthority: 85,
+    openDate: "2026-05-20T00:00:00.000Z",
+    closeDate: "2026-06-10T00:00:00.000Z",
+    isHaroQuery: false,
+    mayCloseEarly: true,
   },
 ];
 
@@ -210,9 +227,33 @@ describe("premium-questions bronze ingest + normalized outlet", () => {
     expect(q.pitchUrl).toBe("https://featured.com/q/101");
   });
 
-  // S2 — no outlet exposed: serve null, but STILL persist raw (no fabrication).
-  it("S2: serves null outlet and still persists raw when Featured exposes none", async () => {
-    const { client } = makeFakePremiumClient(PREMIUM_S2);
+  // Real Featured premium shape: no outlet field → derive from sourceUrl host;
+  // pitchUrl ← publicLink, deadline ← closeDate, createdAt ← openDate.
+  it("derives outlet from sourceUrl host and maps publicLink/closeDate/openDate", async () => {
+    const { client } = makeFakePremiumClient(PREMIUM_REAL);
+    const app = createTestApp({ premiumQuestionsDeps: premiumDeps(client) });
+
+    const res = await request(app)
+      .get("/orgs/featured/premium-questions")
+      .set(AUTH_HEADERS);
+
+    const q = res.body.questions[0];
+    expect(q.mediaOutlet).toBe("dice.com"); // bare host, www stripped, no fabrication
+    expect(q.pitchUrl).toBe("https://featured.com/q/301/answer"); // publicLink
+    expect(q.deadline).toContain("2026-06-10"); // closeDate
+    expect(q.createdAt).toBe("2026-05-20T00:00:00.000Z"); // openDate
+
+    const rows = await db.select().from(featuredPremiumQuestions);
+    expect(rows[0].mediaOutlet).toBe("dice.com");
+    // raw preserved verbatim incl. the sourceUrl it was derived from
+    expect((rows[0].raw as Record<string, unknown>).sourceUrl).toBe(
+      "https://www.dice.com"
+    );
+  });
+
+  // Unrecoverable — no outlet AND no sourceUrl: serve null, still persist raw.
+  it("serves null outlet (and persists raw) when neither outlet nor sourceUrl exists", async () => {
+    const { client } = makeFakePremiumClient(PREMIUM_NO_SOURCE);
     const app = createTestApp({ premiumQuestionsDeps: premiumDeps(client) });
 
     const res = await request(app)

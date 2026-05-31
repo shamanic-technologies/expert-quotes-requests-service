@@ -65,3 +65,40 @@ export const MEDIA_OUTLET_KEYS = [
   "publication",
   "publisher",
 ] as const;
+
+/** Candidate keys for the outlet's own website URL (Featured's declared source). */
+export const SOURCE_URL_KEYS = ["sourceUrl", "source_url"] as const;
+
+/**
+ * Registrable hostname of a URL, `www.` stripped — e.g.
+ * `https://www.dice.com/x` → `dice.com`. Null on empty / non-string / unparseable
+ * (never throws, never fabricates). Used to derive the outlet from a source-site
+ * URL when no explicit outlet field is present.
+ */
+export function hostnameFromUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim().length === 0) return null;
+  try {
+    const host = new URL(value.trim()).hostname.replace(/^www\./i, "");
+    return host.length > 0 ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the media outlet for a Featured payload: an explicit outlet field if
+ * present, else the hostname of the declared source-site URL (`sourceUrl`).
+ *
+ * The fallback is the documented-enrichment exception to "never fabricate an
+ * outlet" — `sourceUrl` is Featured's OWN declared publication site, not a guess
+ * from a journalist email domain. Featured's `/premium-question-list` feed
+ * confirmed (prod, 2026-05-31) to carry NO outlet field at all but a 100%-present
+ * `sourceUrl` (e.g. `https://www.dice.com`), so this is the only honest source of
+ * the outlet for that feed. Returns a bare host (`dice.com`); prettifying to a
+ * brand name ("Dice") would be a lossy guess and is a display-layer concern.
+ */
+export function deriveOutlet(o: Record<string, unknown>): string | null {
+  const direct = readStr(o, ...MEDIA_OUTLET_KEYS);
+  if (direct) return direct;
+  return hostnameFromUrl(readStr(o, ...SOURCE_URL_KEYS));
+}
