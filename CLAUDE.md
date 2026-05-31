@@ -100,4 +100,5 @@ See `.env.example` for the full list. Key envs:
 
 - Hotfix → `release.sh hotfix` (when added) → `main` → tag.
 - Feature / bugfix → branch from `origin/main` (no `staging` yet) → PR → merge with `gh pr merge --auto --squash` → tag manually.
+- **Bump `package.json` `version` IN THE SAME PR, and tag the merge commit `v<that version>`.** The tag must match `package.json` exactly — every prior release does (`v0.1.8` ⇒ `package.json` 0.1.8, etc.). Forgetting the inline bump forces a separate bump PR before you can tag (happened on #12 → #13). The `vX.Y.Z` tag sequence follows the most recent tag's creation order, not strict semver max (`v0.2.0` sits on an out-of-order older commit — ignore it; continue the `v0.1.x` line).
 - Staging branch will be created post-`v0.1.0` for soak before promotion (see `release` skill).
