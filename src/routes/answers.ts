@@ -9,10 +9,7 @@ import {
   type FeaturedCredentials,
 } from "../lib/featured-client.js";
 import { getFeaturedCredentials } from "../lib/key-service-client.js";
-import {
-  ensureFeaturedProfile,
-  type FetchLogoBytes,
-} from "../lib/featured-profile-bootstrap.js";
+import { ensureFeaturedProfile } from "../lib/featured-profile-bootstrap.js";
 import {
   addCosts,
   updateCostStatus,
@@ -56,7 +53,6 @@ export interface AnswersDeps {
     credentials: FeaturedCredentials,
     overrides?: Partial<FeaturedClientOptions>
   ) => FeaturedClient;
-  fetchLogoBytes?: FetchLogoBytes;
 }
 
 function defaultBuildClient(
@@ -83,7 +79,6 @@ async function countRecentSubmissions(cacheKey: string): Promise<number> {
 export function createAnswersRouter(deps: AnswersDeps = {}): Router {
   const router = Router();
   const buildClient = deps.buildClient ?? defaultBuildClient;
-  const fetchLogoBytes = deps.fetchLogoBytes;
 
   router.post("/orgs/featured/answers", async (req, res) => {
     const parsed = SubmitAnswerRequestSchema.safeParse(req.body);
@@ -144,10 +139,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
       profile = await ensureFeaturedProfile({
         orgId,
         brandId,
-        userId,
-        runId,
         client,
-        fetchLogoBytes,
       });
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });

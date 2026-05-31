@@ -61,6 +61,9 @@ function makeFakeClient(opps: unknown[] = OPPS): FeaturedClient {
   return {
     getCacheKey: () => "test-cache",
     listOpportunities: async () => opps,
+    listProfiles: async () => [
+      { profileId: 77, isActive: true, isFlagged: false },
+    ],
     submitAnswer: async () => ({ message: "ok" }),
   } as unknown as FeaturedClient;
 }

@@ -8,10 +8,7 @@ import {
   type FeaturedCredentials,
 } from "../lib/featured-client.js";
 import { getFeaturedCredentials } from "../lib/key-service-client.js";
-import {
-  ensureFeaturedProfile,
-  type FetchLogoBytes,
-} from "../lib/featured-profile-bootstrap.js";
+import { ensureFeaturedProfile } from "../lib/featured-profile-bootstrap.js";
 import {
   CreateProfileRequestSchema,
   ProfilesListQuerySchema,
@@ -22,7 +19,6 @@ export interface ProfilesDeps {
     credentials: FeaturedCredentials,
     overrides?: Partial<FeaturedClientOptions>
   ) => FeaturedClient;
-  fetchLogoBytes?: FetchLogoBytes;
 }
 
 function defaultBuildClient(
@@ -46,7 +42,6 @@ function toRow(r: typeof featuredProfiles.$inferSelect) {
 export function createProfilesRouter(deps: ProfilesDeps = {}): Router {
   const router = Router();
   const buildClient = deps.buildClient ?? defaultBuildClient;
-  const fetchLogoBytes = deps.fetchLogoBytes;
 
   router.get("/orgs/featured/profiles", async (req, res) => {
     const parsed = ProfilesListQuerySchema.safeParse(req.query);
@@ -97,10 +92,7 @@ export function createProfilesRouter(deps: ProfilesDeps = {}): Router {
       await ensureFeaturedProfile({
         orgId,
         brandId,
-        userId,
-        runId,
         client,
-        fetchLogoBytes,
       });
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });

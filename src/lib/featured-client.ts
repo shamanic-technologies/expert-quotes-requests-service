@@ -35,6 +35,25 @@ export interface FeaturedProfileResponse {
   [key: string]: unknown;
 }
 
+/**
+ * A Featured.com expert profile — a PERSON, not a brand. Shape confirmed from
+ * the live `GET /profiles` response (2026-05-31): the endpoint returns
+ * `{ profileList: FeaturedProfile[] }`, and each entry carries person fields
+ * (`firstName`/`lastName`/`email`/`linkedinUrl`). There is no brand `name` or
+ * logo `image` field. `add-profile` is unusable today (server-side 500 for every
+ * payload shape), so profiles are resolved from this list, never created here.
+ */
+export interface FeaturedProfile {
+  profileId: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  linkedinUrl?: string;
+  isActive?: boolean;
+  isFlagged?: boolean;
+  isUsed?: boolean;
+}
+
 export interface FeaturedSubmittedResponse {
   data: unknown[];
   total?: number;
@@ -255,8 +274,18 @@ export class FeaturedClient {
     return (await response.json()) as FeaturedProfileResponse;
   }
 
-  listProfiles(): Promise<FeaturedProfileResponse[]> {
-    return this.request<FeaturedProfileResponse[]>("/profiles");
+  async listProfiles(): Promise<FeaturedProfile[]> {
+    const data = await this.request<{ profileList?: FeaturedProfile[] }>(
+      "/profiles"
+    );
+    if (!data || !Array.isArray(data.profileList)) {
+      throw new Error(
+        `Featured GET /profiles returned unexpected shape (expected { profileList: [...] }): ${JSON.stringify(
+          data
+        )?.slice(0, 200)}`
+      );
+    }
+    return data.profileList;
   }
 
   deactivateProfile(profileId: number): Promise<unknown> {
