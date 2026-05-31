@@ -59,6 +59,42 @@ export const featuredOpportunities = pgTable(
 );
 
 /**
+ * Bronze: append-only raw Featured PREMIUM questions (the `/premium-question-list`
+ * feed — the only API-answerable one), keyed by `featuredQuestionId` (always
+ * present on premium, unlike `/opportunities-list`). Re-ingest is idempotent via
+ * ON CONFLICT (featured_question_id) DO UPDATE. `mediaOutlet` is normalized at
+ * ingest through the shared `MEDIA_OUTLET_KEYS` aliases so the outlet Featured
+ * exposes is captured (not dropped by a verbatim pass-through). `raw` preserves
+ * the exact provider payload so the outlet question is forever answerable from
+ * stored data and recoverable for backfill.
+ */
+export const featuredPremiumQuestions = pgTable(
+  "featured_premium_questions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    featuredQuestionId: integer("featured_question_id").notNull(),
+    questionText: text("question_text").notNull(),
+    mediaOutlet: text("media_outlet"),
+    source: text("source"),
+    pitchUrl: text("pitch_url"),
+    deadline: timestamp("deadline", { withTimezone: true }),
+    raw: jsonb("raw").notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_featured_premium_questions_fqid").on(
+      table.featuredQuestionId
+    ),
+    index("idx_featured_premium_questions_first_seen").on(table.firstSeenAt),
+  ]
+);
+
+/**
  * Per-(org, brand) delivery ledger. Records which bronze opportunities have
  * already been served to a given brand so consecutive pulls return disjoint
  * sets and a polling consumer terminates (returns `[]` once exhausted).
@@ -160,6 +196,10 @@ export const featuredSubmissions = pgTable(
 export type FeaturedJwtRow = typeof featuredJwt.$inferSelect;
 export type FeaturedOpportunity = typeof featuredOpportunities.$inferSelect;
 export type NewFeaturedOpportunity = typeof featuredOpportunities.$inferInsert;
+export type FeaturedPremiumQuestion =
+  typeof featuredPremiumQuestions.$inferSelect;
+export type NewFeaturedPremiumQuestion =
+  typeof featuredPremiumQuestions.$inferInsert;
 export type FeaturedProfile = typeof featuredProfiles.$inferSelect;
 export type NewFeaturedProfile = typeof featuredProfiles.$inferInsert;
 export type FeaturedDelivery = typeof featuredDeliveries.$inferSelect;
