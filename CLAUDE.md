@@ -25,8 +25,8 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 - `src/routes/submissions.ts` — `GET /orgs/featured/submissions`
 - `src/middleware/auth.ts` — `apiKeyAuth` + `requireOrgId` + `withRunTracking` (per shared `service-architecture` convention)
 - `src/lib/featured-client.ts` — Featured.com HTTP wrapper (JWT cache, rolling-window rate limit, 8 endpoints)
-- `src/lib/featured-profile-bootstrap.ts` — Lazy `(org, brand) → Featured profileId` creation via brand-service logo
-- `src/lib/brand-client.ts` — `getBrand` + `getBrandLogo` from brand-service
+- `src/lib/featured-profile-bootstrap.ts` — Lazy `(org, brand) → Featured profileId` creation via brand-service logo (`brand.logoUrl`)
+- `src/lib/brand-client.ts` — `getBrand` from brand-service `GET /internal/brands/{id}?orgId=` (server-to-server `/internal/*` tier, x-api-key + x-org-id). Returns the canonical minimal brand shape `{ id, domain, url, name, logoUrl, createdAt, updatedAt }`; logo URL is `brand.logoUrl` (no separate media-assets fetch — that route does not exist). Business fields (industry/geography/targetAudience/description) are NOT on this shape; fetch via brand-service `POST /internal/brands/extract-fields` if ever needed.
 - `src/lib/key-service-client.ts` — `getFeaturedCredentials` via key-service `featured` provider (env-fallback when provider not yet registered)
 - `src/lib/featured-normalize.ts` — shared field normalizers (`readStr` / `readInt` / `readDate` + `deriveOutlet` / `hostnameFromUrl` + `MEDIA_OUTLET_KEYS` / `SOURCE_URL_KEYS`). BOTH ingestion paths resolve the outlet through the one shared `deriveOutlet` (explicit outlet alias, else `sourceUrl` hostname), so outlet coverage is symmetric by construction.
 - `src/lib/runs-client.ts` — Mandatory run tracking + cost declaration (`addCosts` / `updateCostStatus`). Fails 502 if runs-service down.
