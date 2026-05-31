@@ -184,4 +184,43 @@ describe("FeaturedClient", () => {
     expect(loginCalls).toBe(2);
     expect(profileCalls).toBe(2);
   });
+
+  it("listProfiles unwraps the { profileList: [...] } envelope", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/login"))
+        return jsonResponse({ "x-access-token": "tok" });
+      if (url.endsWith("/profiles"))
+        return jsonResponse({
+          profileList: [
+            { profileId: 88890, firstName: "Kevin", isActive: true },
+          ],
+        });
+      throw new Error("unexpected url " + url);
+    });
+    const client = new FeaturedClient({
+      credentials: { username: "u-list", password: "p" },
+      baseUrl: "http://featured.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    const profiles = await client.listProfiles();
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].profileId).toBe(88890);
+  });
+
+  it("listProfiles fails loud on an unexpected shape (bare array)", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/login"))
+        return jsonResponse({ "x-access-token": "tok" });
+      if (url.endsWith("/profiles")) return jsonResponse([{ profileId: 1 }]);
+      throw new Error("unexpected url " + url);
+    });
+    const client = new FeaturedClient({
+      credentials: { username: "u-list-bad", password: "p" },
+      baseUrl: "http://featured.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(client.listProfiles()).rejects.toThrow(/unexpected shape/);
+  });
 });
