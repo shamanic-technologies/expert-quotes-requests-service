@@ -1,28 +1,27 @@
-const BRAND_SERVICE_URL = process.env.BRAND_SERVICE_URL;
-const BRAND_SERVICE_API_KEY = process.env.BRAND_SERVICE_API_KEY;
-
 function getConfig() {
-  if (!BRAND_SERVICE_URL) throw new Error("BRAND_SERVICE_URL is not set");
-  if (!BRAND_SERVICE_API_KEY)
-    throw new Error("BRAND_SERVICE_API_KEY is not set");
-  return { url: BRAND_SERVICE_URL, apiKey: BRAND_SERVICE_API_KEY };
+  const url = process.env.BRAND_SERVICE_URL;
+  const apiKey = process.env.BRAND_SERVICE_API_KEY;
+  if (!url) throw new Error("BRAND_SERVICE_URL is not set");
+  if (!apiKey) throw new Error("BRAND_SERVICE_API_KEY is not set");
+  return { url, apiKey };
 }
 
+/**
+ * Canonical minimal brand shape returned by brand-service
+ * `GET /internal/brands/{id}`. Business fields (industry, geography,
+ * target audience, description) are no longer on this shape — they must be
+ * fetched via `POST /internal/brands/extract-fields` if ever needed.
+ */
 export interface BrandContext {
   id: string;
+  domain: string;
+  url: string;
   name: string;
-  industry?: string;
-  geography?: string;
-  targetAudience?: string;
-  description?: string;
-  [key: string]: unknown;
-}
-
-export interface BrandLogoAsset {
-  id: string;
-  permanentUrl: string;
-  category: string;
-  [key: string]: unknown;
+  /** Logo image URL. Lazy-filled by brand-service with a deterministic
+   *  logo.dev URL when absent, so this is always present. */
+  logoUrl: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 function buildHeaders(orgId: string, userId?: string, runId?: string) {
@@ -40,42 +39,22 @@ export async function getBrand(
   brandId: string,
   orgId: string,
   userId?: string,
-  runId?: string
+  runId?: string,
+  fetchImpl: typeof fetch = fetch
 ): Promise<BrandContext> {
   const { url } = getConfig();
-  const response = await fetch(`${url}/orgs/brands/${brandId}`, {
+  const path = `/internal/brands/${brandId}?orgId=${orgId}`;
+  const response = await fetchImpl(`${url}${path}`, {
     method: "GET",
     headers: buildHeaders(orgId, userId, runId),
   });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(
-      `brand-service GET /orgs/brands/${brandId} failed (${response.status}): ${body}`
+      `brand-service GET ${path} failed (${response.status}): ${body}`
     );
   }
   const data = (await response.json()) as { brand?: BrandContext };
   if (!data.brand) throw new Error("brand-service response missing brand");
   return data.brand;
-}
-
-export async function getBrandLogo(
-  brandId: string,
-  orgId: string,
-  userId?: string,
-  runId?: string
-): Promise<BrandLogoAsset | null> {
-  const { url } = getConfig();
-  const response = await fetch(
-    `${url}/orgs/brands/${brandId}/media-assets?category=logo`,
-    { method: "GET", headers: buildHeaders(orgId, userId, runId) }
-  );
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(
-      `brand-service GET /orgs/brands/${brandId}/media-assets failed (${response.status}): ${body}`
-    );
-  }
-  const data = (await response.json()) as { mediaAssets?: BrandLogoAsset[] };
-  const logos = data.mediaAssets ?? [];
-  return logos[0] ?? null;
 }
