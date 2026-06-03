@@ -17,6 +17,29 @@ describe("FeaturedClient", () => {
     _resetFeaturedClientState();
   });
 
+  it("defaults base URL to the Connectively host when no override is set", async () => {
+    const prev = process.env.FEATURED_API_BASE_URL;
+    delete process.env.FEATURED_API_BASE_URL;
+    try {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ "x-access-token": "tok" }));
+      const client = new FeaturedClient({
+        credentials: { username: "u", password: "p" },
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+
+      await client.login();
+
+      expect(fetchImpl).toHaveBeenCalledWith(
+        "https://www.connectively.us/api/external-users/login",
+        expect.anything()
+      );
+    } finally {
+      if (prev !== undefined) process.env.FEATURED_API_BASE_URL = prev;
+    }
+  });
+
   it("login caches JWT for 24h (single fetch on repeat call)", async () => {
     const fetchImpl = vi
       .fn()

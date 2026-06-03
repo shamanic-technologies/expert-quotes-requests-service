@@ -13,6 +13,6 @@ export const config = {
   brandServiceApiKey: process.env.BRAND_SERVICE_API_KEY,
   featuredApiBaseUrl:
     process.env.FEATURED_API_BASE_URL ||
-    "https://featured.com/api/external-users",
+    "https://www.connectively.us/api/external-users",
   opportunityTtlMs: Number.isFinite(parsedTtl) ? parsedTtl : 5 * 60 * 1000,
 };
