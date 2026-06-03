@@ -1,4 +1,8 @@
-const DEFAULT_BASE_URL = "https://featured.com/api/external-users";
+// Featured.com relaunched as Connectively (2026-06-02); the external-users API
+// migrated to www.connectively.us. The old featured.com host now sits behind a
+// Vercel firewall and returns a 429 "Security Checkpoint" challenge for every
+// server-to-server call. Same paths, same x-access-token auth. (DIS-126 retro.)
+const DEFAULT_BASE_URL = "https://www.connectively.us/api/external-users";
 const JWT_TTL_MS = 24 * 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT_MAX = 100;
