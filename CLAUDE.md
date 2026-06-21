@@ -53,7 +53,9 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 
 ## Cross-service auth + identity
 
-`/orgs/*` requires `x-api-key` (matches `EXPERT_QUOTES_REQUESTS_SERVICE_API_KEY`) + `x-org-id`. `x-user-id`, `x-run-id`, `x-brand-id`, `x-campaign-id`, `x-feature-slug`, `x-workflow-slug` are forwarded to downstream calls. See `~/.claude/skills/service-architecture/SKILL.md`.
+`/orgs/*` requires `x-api-key` (matches `EXPERT_QUOTES_REQUESTS_SERVICE_API_KEY`) + `x-org-id`. `x-user-id`, `x-run-id`, `x-brand-id`, `x-audience-id`, `x-campaign-id`, `x-feature-slug`, `x-workflow-slug` are forwarded to downstream **internal** calls. See `~/.claude/skills/service-architecture/SKILL.md`.
+
+**`x-audience-id` is the per-audience cost-attribution key** (the priority audience campaign-service picks at run start). EQRS reads it inbound, threads it into `req.audienceId` + `CostIdentity`, forwards it on every internal call (runs / billing / brand / key-service), and tags BOTH its runs-service child run AND its `featured-api-pitch-submit` cost declaration (runs-service attributes `SUM(cost) GROUP BY COALESCE(runs_costs.audience_id, runs.audience_id)` — flat, no rollup, so the row must carry it). Optional: absent outside a campaign flow → omitted, never throws. **Egress strip (security): `featured-client.ts` NEVER forwards any internal tracking header to the external Connectively/Featured host — it authenticates with its own `x-access-token` only. Guarded by a test.**
 
 `withRunTracking` creates a child run in runs-service on every `/orgs/*` request and closes it on response. `req.parentRunId` = caller's run id; `req.runId` = this service's own run id. Downstream calls must use `req.runId` as the outbound `x-run-id`.
 

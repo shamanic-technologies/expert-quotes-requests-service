@@ -15,7 +15,12 @@ export interface CreateRunResponse {
 }
 
 export async function createChildRun(
-  request: { parentRunId?: string; serviceName: string; taskName: string },
+  request: {
+    parentRunId?: string;
+    serviceName: string;
+    taskName: string;
+    audienceId?: string;
+  },
   orgId?: string,
   userId?: string
 ): Promise<CreateRunResponse> {
@@ -28,6 +33,9 @@ export async function createChildRun(
   if (orgId) headers["x-org-id"] = orgId;
   if (userId) headers["x-user-id"] = userId;
   if (request.parentRunId) headers["x-run-id"] = request.parentRunId;
+  // Audience attribution: forward so the child run carries audience_id
+  // (runs-service: header takes precedence, else inherited from parent).
+  if (request.audienceId) headers["x-audience-id"] = request.audienceId;
 
   const response = await fetch(`${url}/v1/runs`, {
     method: "POST",
@@ -89,6 +97,7 @@ export interface CostIdentity {
   orgId: string;
   userId?: string;
   brandId?: string;
+  audienceId?: string;
   campaignId?: string;
   featureSlug?: string;
   workflowSlug?: string;
@@ -120,6 +129,7 @@ function costIdentityHeaders(
   };
   if (identity.userId) headers["x-user-id"] = identity.userId;
   if (identity.brandId) headers["x-brand-id"] = identity.brandId;
+  if (identity.audienceId) headers["x-audience-id"] = identity.audienceId;
   if (identity.campaignId) headers["x-campaign-id"] = identity.campaignId;
   if (identity.featureSlug) headers["x-feature-slug"] = identity.featureSlug;
   if (identity.workflowSlug) headers["x-workflow-slug"] = identity.workflowSlug;

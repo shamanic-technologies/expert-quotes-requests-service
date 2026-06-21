@@ -568,6 +568,15 @@
               "format": "uuid"
             },
             "required": false,
+            "name": "x-audience-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
             "name": "x-campaign-id",
             "in": "header"
           },
@@ -675,6 +684,15 @@
               "format": "uuid"
             },
             "required": false,
+            "name": "x-audience-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
             "name": "x-campaign-id",
             "in": "header"
           },
@@ -765,6 +783,15 @@
             },
             "required": false,
             "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-audience-id",
             "in": "header"
           },
           {
@@ -873,6 +900,15 @@
             },
             "required": false,
             "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-audience-id",
             "in": "header"
           },
           {
@@ -1017,6 +1053,15 @@
               "format": "uuid"
             },
             "required": false,
+            "name": "x-audience-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
             "name": "x-campaign-id",
             "in": "header"
           },
@@ -1094,6 +1139,15 @@
             },
             "required": false,
             "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-audience-id",
             "in": "header"
           },
           {
@@ -1218,6 +1272,15 @@
               "format": "uuid"
             },
             "required": false,
+            "name": "x-audience-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
             "name": "x-campaign-id",
             "in": "header"
           },
@@ -1316,6 +1379,15 @@
               "format": "uuid"
             },
             "required": false,
+            "name": "x-audience-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
             "name": "x-campaign-id",
             "in": "header"
           },
@@ -1405,6 +1477,15 @@
             },
             "required": false,
             "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-audience-id",
             "in": "header"
           },
           {
@@ -1512,6 +1593,15 @@
             },
             "required": false,
             "name": "x-brand-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "x-audience-id",
             "in": "header"
           },
           {

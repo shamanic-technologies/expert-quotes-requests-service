@@ -94,7 +94,13 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
 
     let credentials: FeaturedCredentials;
     try {
-      credentials = await getFeaturedCredentials(orgId, caller, userId, runId);
+      credentials = await getFeaturedCredentials(
+        orgId,
+        caller,
+        userId,
+        runId,
+        req.audienceId
+      );
     } catch (err) {
       const name = (err as Error).name;
       const message = (err as Error).message;
@@ -154,6 +160,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
       orgId,
       userId,
       brandId,
+      audienceId: req.audienceId,
       campaignId: req.campaignId,
       featureSlug: req.featureSlug,
       workflowSlug: req.workflowSlug,
@@ -193,6 +200,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
         userId,
         runId,
         brandId,
+        audienceId: req.audienceId,
         campaignId: req.campaignId,
         featureSlug: req.featureSlug,
         workflowSlug: req.workflowSlug,
