@@ -20,6 +20,7 @@ const orgHeaders = z.object({
   "x-user-id": z.string().uuid().optional(),
   "x-run-id": z.string().uuid().optional(),
   "x-brand-id": z.string().optional(),
+  "x-audience-id": z.string().uuid().optional(),
   "x-campaign-id": z.string().uuid().optional(),
   "x-feature-slug": z.string().optional(),
   "x-workflow-slug": z.string().optional(),

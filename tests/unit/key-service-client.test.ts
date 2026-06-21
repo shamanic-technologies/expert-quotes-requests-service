@@ -56,6 +56,7 @@ describe("getFeaturedCredentials (key-service)", () => {
       TEST_CALLER,
       undefined,
       undefined,
+      undefined,
       fetchImpl as unknown as typeof fetch
     );
     expect(creds).toEqual({ username: "kevin.lourd", password: "s3cr3t" });
@@ -83,6 +84,7 @@ describe("getFeaturedCredentials (key-service)", () => {
         TEST_CALLER,
         undefined,
         undefined,
+        undefined,
         fetchImpl as unknown as typeof fetch
       )
     ).rejects.toBeInstanceOf(KeyServiceUnavailableError);
@@ -105,6 +107,7 @@ describe("getFeaturedCredentials (key-service)", () => {
       { method: "POST", path: "/orgs/featured/answers" },
       "00000000-0000-0000-0000-0000000000aa",
       "00000000-0000-0000-0000-0000000000bb",
+      "00000000-0000-0000-0000-0000000000cc",
       fetchImpl as unknown as typeof fetch
     );
 
@@ -112,6 +115,7 @@ describe("getFeaturedCredentials (key-service)", () => {
       "x-org-id": "00000000-0000-0000-0000-00000000000a",
       "x-user-id": "00000000-0000-0000-0000-0000000000aa",
       "x-run-id": "00000000-0000-0000-0000-0000000000bb",
+      "x-audience-id": "00000000-0000-0000-0000-0000000000cc",
       "x-api-key": "test-key-service-api-key",
       "X-Caller-Service": "expert-quotes-requests-service",
       "X-Caller-Method": "POST",
@@ -127,6 +131,7 @@ describe("getFeaturedCredentials (key-service)", () => {
       getFeaturedCredentials(
         "00000000-0000-0000-0000-00000000000a",
         TEST_CALLER,
+        undefined,
         undefined,
         undefined,
         fetchImpl as unknown as typeof fetch

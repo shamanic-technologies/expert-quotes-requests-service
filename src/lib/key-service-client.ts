@@ -25,6 +25,7 @@ async function fetchDecryptedKey(
   caller: CallerContext,
   userId: string | undefined,
   runId: string | undefined,
+  audienceId: string | undefined,
   fetchImpl: typeof fetch
 ): Promise<string> {
   const KEY_SERVICE_URL = process.env.KEY_SERVICE_URL;
@@ -44,6 +45,7 @@ async function fetchDecryptedKey(
   };
   if (userId) headers["x-user-id"] = userId;
   if (runId) headers["x-run-id"] = runId;
+  if (audienceId) headers["x-audience-id"] = audienceId;
 
   let response: Response;
   try {
@@ -83,6 +85,7 @@ export async function getFeaturedCredentials(
   caller: CallerContext,
   userId?: string,
   runId?: string,
+  audienceId?: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<FeaturedCredentials> {
   const [username, password] = await Promise.all([
@@ -92,6 +95,7 @@ export async function getFeaturedCredentials(
       caller,
       userId,
       runId,
+      audienceId,
       fetchImpl
     ),
     fetchDecryptedKey(
@@ -100,6 +104,7 @@ export async function getFeaturedCredentials(
       caller,
       userId,
       runId,
+      audienceId,
       fetchImpl
     ),
   ]);

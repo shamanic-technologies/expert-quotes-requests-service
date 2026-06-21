@@ -231,6 +231,48 @@ describe("FeaturedClient", () => {
     expect(profiles[0].profileId).toBe(88890);
   });
 
+  it("never leaks internal tracking headers to the external Featured host (egress strip)", async () => {
+    // Security guard: internal attribution/tracking headers (x-audience-id,
+    // x-run-id, x-campaign-id, …) must NEVER cross the egress to a 3rd-party
+    // vendor. FeaturedClient authenticates with its own x-access-token only.
+    const observed: Array<Record<string, string>> = [];
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+      observed.push((init.headers ?? {}) as Record<string, string>);
+      if (url.endsWith("/login"))
+        return jsonResponse({ "x-access-token": "tok" });
+      return jsonResponse({ message: "Success" });
+    });
+    const client = new FeaturedClient({
+      credentials: { username: "u-egress", password: "p" },
+      baseUrl: "http://featured.test",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await client.submitAnswer({
+      answer: "z".repeat(120),
+      featuredQuestionId: 1,
+      profileId: 1,
+    });
+
+    const FORBIDDEN = [
+      "x-audience-id",
+      "x-run-id",
+      "x-campaign-id",
+      "x-feature-slug",
+      "x-workflow-slug",
+      "x-org-id",
+      "x-brand-id",
+      "x-user-id",
+    ];
+    expect(observed.length).toBeGreaterThan(0);
+    for (const headers of observed) {
+      const lowerKeys = Object.keys(headers).map((k) => k.toLowerCase());
+      for (const forbidden of FORBIDDEN) {
+        expect(lowerKeys).not.toContain(forbidden);
+      }
+    }
+  });
+
   it("listProfiles fails loud on an unexpected shape (bare array)", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.endsWith("/login"))

@@ -11,6 +11,7 @@ declare global {
       runId?: string;
       campaignId?: string;
       brandId?: string;
+      audienceId?: string;
       featureSlug?: string;
       workflowSlug?: string;
     }
@@ -42,6 +43,8 @@ export function apiKeyAuth(
   req.campaignId =
     (req.headers["x-campaign-id"] as string | undefined) ?? undefined;
   req.brandId = (req.headers["x-brand-id"] as string | undefined) ?? undefined;
+  req.audienceId =
+    (req.headers["x-audience-id"] as string | undefined) ?? undefined;
   req.featureSlug =
     (req.headers["x-feature-slug"] as string | undefined) ?? undefined;
   req.workflowSlug =
@@ -82,6 +85,7 @@ export async function withRunTracking(
         parentRunId: req.parentRunId,
         serviceName: "expert-quotes-requests-service",
         taskName,
+        audienceId: req.audienceId,
       },
       req.orgId,
       req.userId

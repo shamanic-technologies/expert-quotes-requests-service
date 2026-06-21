@@ -47,6 +47,7 @@ describe("getBrand (brand-service /internal tier)", () => {
       ORG_ID,
       undefined,
       undefined,
+      undefined,
       fetchImpl as unknown as typeof fetch
     );
 
@@ -65,6 +66,7 @@ describe("getBrand (brand-service /internal tier)", () => {
     const brand = await getBrand(
       BRAND_ID,
       ORG_ID,
+      undefined,
       undefined,
       undefined,
       fetchImpl as unknown as typeof fetch
@@ -88,6 +90,7 @@ describe("getBrand (brand-service /internal tier)", () => {
       ORG_ID,
       "00000000-0000-0000-0000-0000000000aa",
       "00000000-0000-0000-0000-0000000000bb",
+      "00000000-0000-0000-0000-0000000000cc",
       fetchImpl as unknown as typeof fetch
     );
 
@@ -96,6 +99,7 @@ describe("getBrand (brand-service /internal tier)", () => {
       "x-org-id": ORG_ID,
       "x-user-id": "00000000-0000-0000-0000-0000000000aa",
       "x-run-id": "00000000-0000-0000-0000-0000000000bb",
+      "x-audience-id": "00000000-0000-0000-0000-0000000000cc",
     });
   });
 
@@ -110,6 +114,7 @@ describe("getBrand (brand-service /internal tier)", () => {
         ORG_ID,
         undefined,
         undefined,
+        undefined,
         fetchImpl as unknown as typeof fetch
       )
     ).rejects.toThrow(/404.*Cannot GET \/internal\/brands\/x/);
@@ -122,6 +127,7 @@ describe("getBrand (brand-service /internal tier)", () => {
       getBrand(
         BRAND_ID,
         ORG_ID,
+        undefined,
         undefined,
         undefined,
         fetchImpl as unknown as typeof fetch

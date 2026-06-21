@@ -24,7 +24,12 @@ export interface BrandContext {
   updatedAt: string;
 }
 
-function buildHeaders(orgId: string, userId?: string, runId?: string) {
+function buildHeaders(
+  orgId: string,
+  userId?: string,
+  runId?: string,
+  audienceId?: string
+) {
   const { apiKey } = getConfig();
   const headers: Record<string, string> = {
     "x-api-key": apiKey,
@@ -32,6 +37,7 @@ function buildHeaders(orgId: string, userId?: string, runId?: string) {
   };
   if (userId) headers["x-user-id"] = userId;
   if (runId) headers["x-run-id"] = runId;
+  if (audienceId) headers["x-audience-id"] = audienceId;
   return headers;
 }
 
@@ -40,13 +46,14 @@ export async function getBrand(
   orgId: string,
   userId?: string,
   runId?: string,
+  audienceId?: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<BrandContext> {
   const { url } = getConfig();
   const path = `/internal/brands/${brandId}?orgId=${orgId}`;
   const response = await fetchImpl(`${url}${path}`, {
     method: "GET",
-    headers: buildHeaders(orgId, userId, runId),
+    headers: buildHeaders(orgId, userId, runId, audienceId),
   });
   if (!response.ok) {
     const body = await response.text();

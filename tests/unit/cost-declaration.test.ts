@@ -5,6 +5,7 @@ import {
 } from "../../src/lib/billing-client.js";
 import {
   addCosts,
+  createChildRun,
   updateCostStatus,
 } from "../../src/lib/runs-client.js";
 
@@ -19,6 +20,7 @@ const IDENTITY = {
   orgId: "00000000-0000-0000-0000-00000000000a",
   userId: "00000000-0000-0000-0000-0000000000aa",
   brandId: "00000000-0000-0000-0000-0000000000cc",
+  audienceId: "00000000-0000-0000-0000-0000000000dd",
 };
 const RUN_ID = "00000000-0000-0000-0000-0000000000bb";
 
@@ -46,6 +48,7 @@ describe("billing-client.authorizeCredit", () => {
         userId: IDENTITY.userId,
         runId: RUN_ID,
         brandId: IDENTITY.brandId,
+        audienceId: IDENTITY.audienceId,
       },
       fetchImpl as unknown as typeof fetch
     );
@@ -60,6 +63,7 @@ describe("billing-client.authorizeCredit", () => {
       "x-user-id": IDENTITY.userId,
       "x-run-id": RUN_ID,
       "x-brand-id": IDENTITY.brandId,
+      "x-audience-id": IDENTITY.audienceId,
     });
     expect(capturedBody).toEqual({
       items: [{ costName: "featured-api-pitch-submit", quantity: 1 }],
@@ -107,9 +111,11 @@ describe("billing-client.authorizeCredit", () => {
 describe("runs-client cost lifecycle", () => {
   it("addCosts posts provisioned item and returns the created cost id", async () => {
     let capturedUrl = "";
+    let capturedHeaders: Record<string, string> = {};
     let capturedBody: { items: unknown[] } = { items: [] };
     const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
       capturedUrl = url;
+      capturedHeaders = init.headers as Record<string, string>;
       capturedBody = JSON.parse(init.body as string);
       return jsonResponse(
         {
@@ -150,6 +156,9 @@ describe("runs-client cost lifecycle", () => {
     expect(costs[0].id).toBe("cost-1");
     expect(capturedUrl).toBe(`http://runs.test/v1/runs/${RUN_ID}/costs`);
     expect(capturedBody.items).toHaveLength(1);
+    // Audience attribution: the cost row declaration carries x-audience-id so
+    // runs-service tags runs_costs.audience_id (no NULL → no unattributed bucket).
+    expect(capturedHeaders["x-audience-id"]).toBe(IDENTITY.audienceId);
   });
 
   it("updateCostStatus PATCHes the cost to actual", async () => {
@@ -184,6 +193,67 @@ describe("runs-client cost lifecycle", () => {
       `http://runs.test/v1/runs/${RUN_ID}/costs/cost-1`
     );
     expect(capturedBody.status).toBe("actual");
+  });
+
+  it("createChildRun forwards x-audience-id so the child run is attributed (AC1)", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+        return jsonResponse({
+          id: "child-run-1",
+          parentRunId: RUN_ID,
+          serviceName: "expert-quotes-requests-service",
+          taskName: "POST /orgs/featured/answers",
+        });
+      });
+
+    try {
+      const run = await createChildRun(
+        {
+          parentRunId: RUN_ID,
+          serviceName: "expert-quotes-requests-service",
+          taskName: "POST /orgs/featured/answers",
+          audienceId: IDENTITY.audienceId,
+        },
+        IDENTITY.orgId,
+        IDENTITY.userId
+      );
+      expect(run.id).toBe("child-run-1");
+      expect(capturedHeaders["x-audience-id"]).toBe(IDENTITY.audienceId);
+      expect(capturedHeaders["x-run-id"]).toBe(RUN_ID);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("createChildRun omits x-audience-id when absent (optional, no throw)", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+        return jsonResponse({
+          id: "child-run-2",
+          parentRunId: null,
+          serviceName: "expert-quotes-requests-service",
+          taskName: "GET /orgs/featured/opportunities",
+        });
+      });
+
+    try {
+      await createChildRun(
+        {
+          serviceName: "expert-quotes-requests-service",
+          taskName: "GET /orgs/featured/opportunities",
+        },
+        IDENTITY.orgId
+      );
+      expect(capturedHeaders["x-audience-id"]).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("addCosts throws on non-2xx (fail loud)", async () => {
