@@ -21,6 +21,9 @@ const IDENTITY = {
   userId: "00000000-0000-0000-0000-0000000000aa",
   brandId: "00000000-0000-0000-0000-0000000000cc",
   audienceId: "00000000-0000-0000-0000-0000000000dd",
+  campaignId: "00000000-0000-0000-0000-0000000000ee",
+  featureSlug: "pr-expert-quote-opportunities",
+  workflowSlug: "pr-expert-quotes",
 };
 const RUN_ID = "00000000-0000-0000-0000-0000000000bb";
 
@@ -216,6 +219,10 @@ describe("runs-client cost lifecycle", () => {
           serviceName: "expert-quotes-requests-service",
           taskName: "POST /orgs/featured/answers",
           audienceId: IDENTITY.audienceId,
+          campaignId: IDENTITY.campaignId,
+          brandId: IDENTITY.brandId,
+          featureSlug: IDENTITY.featureSlug,
+          workflowSlug: IDENTITY.workflowSlug,
         },
         IDENTITY.orgId,
         IDENTITY.userId
@@ -223,6 +230,74 @@ describe("runs-client cost lifecycle", () => {
       expect(run.id).toBe("child-run-1");
       expect(capturedHeaders["x-audience-id"]).toBe(IDENTITY.audienceId);
       expect(capturedHeaders["x-run-id"]).toBe(RUN_ID);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("createChildRun forwards x-campaign-id (+ brand/feature/workflow) so the costed run is paced by campaign-service (AC: runs.campaign_id set)", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+        return jsonResponse({
+          id: "child-run-3",
+          parentRunId: RUN_ID,
+          serviceName: "expert-quotes-requests-service",
+          taskName: "POST /orgs/featured/answers",
+        });
+      });
+
+    try {
+      await createChildRun(
+        {
+          parentRunId: RUN_ID,
+          serviceName: "expert-quotes-requests-service",
+          taskName: "POST /orgs/featured/answers",
+          campaignId: IDENTITY.campaignId,
+          brandId: IDENTITY.brandId,
+          featureSlug: IDENTITY.featureSlug,
+          workflowSlug: IDENTITY.workflowSlug,
+        },
+        IDENTITY.orgId,
+        IDENTITY.userId
+      );
+      expect(capturedHeaders["x-campaign-id"]).toBe(IDENTITY.campaignId);
+      expect(capturedHeaders["x-brand-id"]).toBe(IDENTITY.brandId);
+      expect(capturedHeaders["x-feature-slug"]).toBe(IDENTITY.featureSlug);
+      expect(capturedHeaders["x-workflow-slug"]).toBe(IDENTITY.workflowSlug);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("createChildRun omits x-campaign-id (+ brand/feature/workflow) when absent (optional, no throw)", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+        return jsonResponse({
+          id: "child-run-4",
+          parentRunId: null,
+          serviceName: "expert-quotes-requests-service",
+          taskName: "GET /orgs/featured/opportunities",
+        });
+      });
+
+    try {
+      await createChildRun(
+        {
+          serviceName: "expert-quotes-requests-service",
+          taskName: "GET /orgs/featured/opportunities",
+        },
+        IDENTITY.orgId
+      );
+      expect(capturedHeaders["x-campaign-id"]).toBeUndefined();
+      expect(capturedHeaders["x-brand-id"]).toBeUndefined();
+      expect(capturedHeaders["x-feature-slug"]).toBeUndefined();
+      expect(capturedHeaders["x-workflow-slug"]).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
