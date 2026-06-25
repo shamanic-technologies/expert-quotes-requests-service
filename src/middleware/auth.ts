@@ -86,6 +86,10 @@ export async function withRunTracking(
         serviceName: "expert-quotes-requests-service",
         taskName,
         audienceId: req.audienceId,
+        campaignId: req.campaignId,
+        brandId: req.brandId,
+        featureSlug: req.featureSlug,
+        workflowSlug: req.workflowSlug,
       },
       req.orgId,
       req.userId

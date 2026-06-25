@@ -20,6 +20,10 @@ export async function createChildRun(
     serviceName: string;
     taskName: string;
     audienceId?: string;
+    campaignId?: string;
+    brandId?: string;
+    featureSlug?: string;
+    workflowSlug?: string;
   },
   orgId?: string,
   userId?: string
@@ -33,9 +37,16 @@ export async function createChildRun(
   if (orgId) headers["x-org-id"] = orgId;
   if (userId) headers["x-user-id"] = userId;
   if (request.parentRunId) headers["x-run-id"] = request.parentRunId;
-  // Audience attribution: forward so the child run carries audience_id
+  // Attribution: forward so the child run row carries these columns
   // (runs-service: header takes precedence, else inherited from parent).
+  // campaign_id in particular gates platform daily-budget pacing
+  // (campaign-service sums runs_costs via runs.campaign_id), so the
+  // featured-api-pitch-submit cost is attributed to the triggering campaign.
   if (request.audienceId) headers["x-audience-id"] = request.audienceId;
+  if (request.campaignId) headers["x-campaign-id"] = request.campaignId;
+  if (request.brandId) headers["x-brand-id"] = request.brandId;
+  if (request.featureSlug) headers["x-feature-slug"] = request.featureSlug;
+  if (request.workflowSlug) headers["x-workflow-slug"] = request.workflowSlug;
 
   const response = await fetch(`${url}/v1/runs`, {
     method: "POST",
