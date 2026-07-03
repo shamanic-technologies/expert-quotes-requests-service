@@ -5,9 +5,26 @@ import {
   readDate,
   safeParseDate,
   hostnameFromUrl,
+  normalizeDomain,
   deriveOutlet,
   MEDIA_OUTLET_KEYS,
 } from "../../src/lib/featured-normalize.js";
+
+describe("normalizeDomain", () => {
+  it("normalizes a bare domain (prepends scheme, lowercases)", () => {
+    expect(normalizeDomain("Distribute.You")).toBe("distribute.you");
+    expect(normalizeDomain("useago.com")).toBe("useago.com");
+  });
+  it("strips scheme, www., and path", () => {
+    expect(normalizeDomain("https://www.useago.com/team")).toBe("useago.com");
+    expect(normalizeDomain("http://distribute.you")).toBe("distribute.you");
+  });
+  it("returns null for empty / non-string / unparseable", () => {
+    expect(normalizeDomain("   ")).toBeNull();
+    expect(normalizeDomain(null)).toBeNull();
+    expect(normalizeDomain(42)).toBeNull();
+  });
+});
 
 describe("featured field normalizers", () => {
   it("readStr returns the first non-empty string among the given keys", () => {

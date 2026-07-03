@@ -156,6 +156,35 @@ export const featuredProfiles = pgTable(
 );
 
 /**
+ * Attribution registry: brand `domain` → Featured/Connectively `profileId`.
+ *
+ * Connectively profiles are PEOPLE on ONE shared account (see CLAUDE.md), and
+ * the `/profiles` API exposes NO company/attribution URL — the per-profile
+ * "Attribution" (e.g. `distribute.you`, `useago.com`) is UI-only. So the
+ * domain → profileId mapping is maintained here, seeded deliberately by the
+ * account owner. `ensureFeaturedProfile` resolves a brand's domain (via
+ * brand-service) against this table to pick which human profile submits the
+ * pitch, and fails loud when a domain is unmapped (no silent fallback pick).
+ *
+ * Account-level registry (NOT per-org): the same Connectively account backs
+ * every org, so the key is the bare registrable `domain`. Add a Connectively
+ * profile → one INSERT here, no deploy.
+ */
+export const featuredProfileAttribution = pgTable(
+  "featured_profile_attribution",
+  {
+    domain: text("domain").primaryKey(),
+    featuredProfileId: integer("featured_profile_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  }
+);
+
+/**
  * Append-only ledger of submission attempts. Drives rolling-window rate-limit
  * accounting (count() over last interval), and gives ops-visible audit trail.
  */
@@ -206,3 +235,7 @@ export type FeaturedDelivery = typeof featuredDeliveries.$inferSelect;
 export type NewFeaturedDelivery = typeof featuredDeliveries.$inferInsert;
 export type FeaturedSubmission = typeof featuredSubmissions.$inferSelect;
 export type NewFeaturedSubmission = typeof featuredSubmissions.$inferInsert;
+export type FeaturedProfileAttribution =
+  typeof featuredProfileAttribution.$inferSelect;
+export type NewFeaturedProfileAttribution =
+  typeof featuredProfileAttribution.$inferInsert;
