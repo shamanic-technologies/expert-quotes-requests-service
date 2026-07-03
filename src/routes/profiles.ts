@@ -93,6 +93,9 @@ export function createProfilesRouter(deps: ProfilesDeps = {}): Router {
         orgId,
         brandId,
         client,
+        userId,
+        runId,
+        audienceId: req.audienceId,
       });
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });

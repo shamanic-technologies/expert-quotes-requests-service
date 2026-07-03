@@ -1,68 +1,86 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { featuredProfiles } from "../db/schema.js";
+import { featuredProfiles, featuredProfileAttribution } from "../db/schema.js";
+import { getBrand } from "./brand-client.js";
+import { normalizeDomain } from "./featured-normalize.js";
 import type { FeaturedClient, FeaturedProfile } from "./featured-client.js";
 
 /**
- * Pick which existing Featured profile to submit under.
+ * Resolve which existing Featured/Connectively profile submits for a brand,
+ * keyed on the brand's DOMAIN via the `featured_profile_attribution` registry.
  *
- * Featured profiles are PEOPLE (firstName/lastName/email/linkedinUrl) on one
- * shared platform account. `add-profile` is unusable — it returns a server-side
- * 500 for every payload shape (confirmed live 2026-05-31) — so we NEVER create a
- * profile; we resolve to one that already exists on the account.
+ * Connectively profiles are PEOPLE on one shared account and `add-profile` is
+ * unusable (server-side 500 for every payload shape — see CLAUDE.md), so we
+ * NEVER create a profile. The `/profiles` API also exposes NO company URL, so
+ * the domain → profileId map is maintained by us (seeded in the registry table)
+ * rather than read from Connectively. A brand's domain (from brand-service) is
+ * matched against the seeded map; the mapped profile is validated to still be
+ * live on the account before use. Unmapped domain, or a mapped profile that is
+ * gone / inactive / flagged, fails loud — no silent fallback pick.
  *
- * Selection: an explicit `FEATURED_PROFILE_ID` pin wins (must exist on the
- * account); otherwise the single active, non-flagged profile. Zero or ambiguous
- * (>1) without a pin fails loud — no silent fallback.
+ * @throws when the brand domain is unresolvable, unmapped, or the mapped
+ *         profile is absent / inactive / flagged on the account.
  */
-export function selectFeaturedProfileId(
-  profiles: FeaturedProfile[],
-  pinnedId?: string
-): number {
-  if (pinnedId !== undefined && pinnedId.trim() !== "") {
-    const pinned = Number(pinnedId);
-    if (!Number.isInteger(pinned)) {
-      throw new Error(
-        `FEATURED_PROFILE_ID must be an integer, got "${pinnedId}"`
-      );
-    }
-    const match = profiles.find((p) => p.profileId === pinned);
-    if (!match) {
-      throw new Error(
-        `FEATURED_PROFILE_ID=${pinned} not found among Featured profiles [${profiles
-          .map((p) => p.profileId)
-          .join(", ")}]`
-      );
-    }
-    return match.profileId;
+export async function resolveProfileIdForDomain(
+  rawDomain: string,
+  client: FeaturedClient
+): Promise<number> {
+  const domain = normalizeDomain(rawDomain);
+  if (!domain) {
+    throw new Error(
+      `brand domain "${rawDomain}" is not a resolvable hostname; cannot map to a Featured profile`
+    );
   }
 
-  const usable = profiles.filter(
-    (p) => p.isActive !== false && p.isFlagged !== true
-  );
-  if (usable.length === 1) {
-    return usable[0].profileId;
+  const mapping = (
+    await db
+      .select()
+      .from(featuredProfileAttribution)
+      .where(eq(featuredProfileAttribution.domain, domain))
+      .limit(1)
+  )[0];
+  if (!mapping) {
+    throw new Error(
+      `no Featured profile mapped for brand domain "${domain}"; seed featured_profile_attribution`
+    );
   }
+  const featuredProfileId = mapping.featuredProfileId;
 
-  throw new Error(
-    `No single usable Featured profile (found ${usable.length} active, non-flagged of ${profiles.length} total); set FEATURED_PROFILE_ID to disambiguate`
-  );
+  // Validate the mapped profile is still live on the account — a deleted /
+  // hidden / flagged profile must fail loud, not submit under a stale id.
+  const profiles: FeaturedProfile[] = await client.listProfiles();
+  const match = profiles.find((p) => p.profileId === featuredProfileId);
+  if (!match) {
+    throw new Error(
+      `mapped Featured profile ${featuredProfileId} (domain "${domain}") not found among account profiles [${profiles
+        .map((p) => p.profileId)
+        .join(", ")}]`
+    );
+  }
+  if (match.isActive === false || match.isFlagged === true) {
+    throw new Error(
+      `mapped Featured profile ${featuredProfileId} (domain "${domain}") is inactive or flagged`
+    );
+  }
+  return featuredProfileId;
 }
 
 /**
  * Resolve the Featured profile to submit under for (orgId, brandId).
  *
- * Cache hit: a local `featured_profiles` row short-circuits. Cache miss: resolve
- * an existing account profile via `listProfiles()` and persist the mapping so
- * future submits skip the lookup. Many brands legitimately map to the SAME
- * Featured profile (the human expert who answers) — client/brand context lives
- * in the answer text, not the profile.
+ * Cache hit: a local `featured_profiles` row short-circuits (no brand-service /
+ * Connectively calls). Cache miss: resolve the brand's domain via brand-service,
+ * map it to a Featured profile through the attribution registry, then persist
+ * the (org, brand) → profileId mapping so future submits skip the lookup.
  */
 export async function ensureFeaturedProfile(input: {
   orgId: string;
   brandId: string;
   client: FeaturedClient;
-  pinnedProfileId?: string;
+  userId?: string;
+  runId?: string;
+  audienceId?: string;
+  getBrandFn?: typeof getBrand;
 }): Promise<{ featuredProfileId: number }> {
   const existing = (
     await db
@@ -80,10 +98,17 @@ export async function ensureFeaturedProfile(input: {
     return { featuredProfileId: existing.featuredProfileId };
   }
 
-  const profiles = await input.client.listProfiles();
-  const featuredProfileId = selectFeaturedProfileId(
-    profiles,
-    input.pinnedProfileId ?? process.env.FEATURED_PROFILE_ID
+  const getBrandFn = input.getBrandFn ?? getBrand;
+  const brand = await getBrandFn(
+    input.brandId,
+    input.orgId,
+    input.userId,
+    input.runId,
+    input.audienceId
+  );
+  const featuredProfileId = await resolveProfileIdForDomain(
+    brand.domain,
+    input.client
   );
 
   const inserted = await db

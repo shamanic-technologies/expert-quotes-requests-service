@@ -86,6 +86,30 @@ export function hostnameFromUrl(value: unknown): string | null {
 }
 
 /**
+ * Registrable hostname of a bare domain OR a full URL, lowercased and `www.`
+ * stripped — e.g. `distribute.you` → `distribute.you`, `https://www.useago.com/x`
+ * → `useago.com`. Unlike `hostnameFromUrl` (which requires a scheme and returns
+ * null for a bare host), this prepends `https://` when no scheme is present so a
+ * brand-service `domain` value ("distribute.you") normalizes cleanly. Null on
+ * empty / non-string / unparseable (never throws, never fabricates).
+ *
+ * Used to key a brand's domain against the `featured_profile_attribution`
+ * registry so both sides (brand-service `domain` and the seeded map keys)
+ * compare byte-equal regardless of scheme / `www.` / casing.
+ */
+export function normalizeDomain(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim().length === 0) return null;
+  const t = value.trim().toLowerCase();
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//.test(t) ? t : `https://${t}`;
+  try {
+    const host = new URL(withScheme).hostname.replace(/^www\./, "");
+    return host.length > 0 ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve the media outlet for a Featured payload: an explicit outlet field if
  * present, else the hostname of the declared source-site URL (`sourceUrl`).
  *
