@@ -14,6 +14,7 @@ import answersRoutes from "./routes/answers.js";
 import profilesRoutes from "./routes/profiles.js";
 import premiumQuestionsRoutes from "./routes/premium-questions.js";
 import submissionsRoutes from "./routes/submissions.js";
+import publishedRoutes from "./routes/published.js";
 import {
   apiKeyAuth,
   requireOrgId,
@@ -49,6 +50,7 @@ app.use(answersRoutes);
 app.use(profilesRoutes);
 app.use(premiumQuestionsRoutes);
 app.use(submissionsRoutes);
+app.use(publishedRoutes);
 
 app.use((_req: express.Request, res: express.Response) => {
   res.status(404).json({ error: "Not found" });
