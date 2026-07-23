@@ -466,3 +466,31 @@ registry.registerPath({
     },
   },
 });
+
+// ─── GET /orgs/featured/published ────────────────────────────────────────────
+
+export const PublishedQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+});
+
+const PublishedResponseSchema = z
+  .object({
+    published: z.array(z.unknown()),
+  })
+  .openapi("PublishedResponse");
+
+registry.registerPath({
+  method: "get",
+  path: "/orgs/featured/published",
+  summary:
+    "List published articles from Featured/Connectively (pass-through). " +
+    "Carries the placement fields absent from /submitted: article link, " +
+    "title, and publish date.",
+  request: { headers: orgHeaders, query: PublishedQuerySchema },
+  responses: {
+    200: {
+      description: "Published articles page",
+      content: { "application/json": { schema: PublishedResponseSchema } },
+    },
+  },
+});

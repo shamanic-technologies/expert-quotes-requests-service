@@ -23,6 +23,7 @@ describe("openapi spec coverage", () => {
     expect(paths).toContain("/orgs/featured/premium-questions");
     expect(paths).toContain("/orgs/featured/premium-questions/refresh");
     expect(paths).toContain("/orgs/featured/submissions");
+    expect(paths).toContain("/orgs/featured/published");
   });
 
   it("premium-question schema serves mediaOutlet as nullable (normalized, never fabricated)", () => {

@@ -64,6 +64,17 @@ export interface FeaturedSubmittedResponse {
   page?: number;
 }
 
+/**
+ * Raw Connectively `/published` body. Each item carries the placement
+ * fields absent from `/submitted`: `publishedLink` (article URL),
+ * `articleTitle`, `publishDate`, plus the `(featuredQuestionId,
+ * profileId)` match key and the same outlet/DR/attribution metadata.
+ * Typed loosely (pass-through) — the consumer decodes what it needs.
+ */
+export interface FeaturedPublishedResponse {
+  published: unknown[];
+}
+
 export class FeaturedRateLimitError extends Error {
   retryAfter: number;
   constructor(retryAfter: number) {
@@ -301,5 +312,9 @@ export class FeaturedClient {
 
   listSubmitted(page = 1): Promise<FeaturedSubmittedResponse> {
     return this.request<FeaturedSubmittedResponse>(`/submitted?page=${page}`);
+  }
+
+  listPublished(page = 1): Promise<FeaturedPublishedResponse> {
+    return this.request<FeaturedPublishedResponse>(`/published?page=${page}`);
   }
 }
