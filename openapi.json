@@ -242,6 +242,17 @@
           },
           "required_cents": {
             "type": "number"
+          },
+          "reason": {
+            "type": "string",
+            "description": "billing-service's reason, verbatim. Present ONLY when the campaign's sales funnel MAX BUDGET refused the spend (`sales_funnel_max_budget_reached` / `sales_funnel_max_budget_unreadable`): raise the max budget, adding credit changes nothing. Absent on a real balance shortfall."
+          },
+          "sales_funnel_cap": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "billing-service's `sales_funnel_cap` verbatim ({ salesFunnelId, salesFunnelCampaignId, amountCents, period, consumedCents, reservedCents }), present only with `reason`."
           }
         },
         "required": [
@@ -983,7 +994,7 @@
             }
           },
           "402": {
-            "description": "Insufficient credit for the featured pitch submit (credit gate). The provisioned cost is cancelled; no submit is attempted.",
+            "description": "billing-service refused the featured pitch submit: the org's balance, or (with `reason`) the campaign's sales funnel max budget. The provisioned cost is cancelled; no submit is attempted.",
             "content": {
               "application/json": {
                 "schema": {

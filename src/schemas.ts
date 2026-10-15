@@ -228,6 +228,18 @@ const InsufficientCreditResponseSchema = z
     error: z.string(),
     balance_cents: z.number(),
     required_cents: z.number(),
+    reason: z
+      .string()
+      .optional()
+      .describe(
+        "billing-service's reason, verbatim. Present ONLY when the campaign's sales funnel MAX BUDGET refused the spend (`sales_funnel_max_budget_reached` / `sales_funnel_max_budget_unreadable`): raise the max budget, adding credit changes nothing. Absent on a real balance shortfall."
+      ),
+    sales_funnel_cap: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(
+        "billing-service's `sales_funnel_cap` verbatim ({ salesFunnelId, salesFunnelCampaignId, amountCents, period, consumedCents, reservedCents }), present only with `reason`."
+      ),
   })
   .openapi("InsufficientCreditResponse");
 
@@ -255,7 +267,7 @@ registry.registerPath({
     },
     402: {
       description:
-        "Insufficient credit for the featured pitch submit (credit gate). The provisioned cost is cancelled; no submit is attempted.",
+        "billing-service refused the featured pitch submit: the org's balance, or (with `reason`) the campaign's sales funnel max budget. The provisioned cost is cancelled; no submit is attempted.",
       content: {
         "application/json": { schema: InsufficientCreditResponseSchema },
       },
