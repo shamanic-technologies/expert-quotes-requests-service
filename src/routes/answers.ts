@@ -18,6 +18,7 @@ import {
 import {
   authorizeCredit,
   BillingServiceError,
+  creditRefusalBody,
 } from "../lib/billing-client.js";
 import { SubmitAnswerRequestSchema } from "../schemas.js";
 
@@ -210,11 +211,7 @@ export function createAnswersRouter(deps: AnswersDeps = {}): Router {
       });
       if (!auth.sufficient) {
         await cancelProvisionedCost(runId!, costId, costIdentity);
-        res.status(402).json({
-          error: "insufficient credit for featured pitch submit",
-          balance_cents: auth.balance_cents,
-          required_cents: auth.required_cents,
-        });
+        res.status(402).json(creditRefusalBody(auth, "featured pitch submit"));
         return;
       }
     } catch (err) {

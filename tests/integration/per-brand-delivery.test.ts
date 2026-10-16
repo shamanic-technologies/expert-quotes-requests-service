@@ -91,6 +91,12 @@ function stubKeyService() {
           text: async () => "",
         } as unknown as Response;
       }
+      // The submit path declares its cost (provision -> authorize -> actualize).
+      const ok = (body: unknown) =>
+        ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }) as unknown as Response;
+      if (u.startsWith("http://runs.test/v1/runs/") && u.endsWith("/costs")) return ok({ costs: [{ id: "cost-1" }] });
+      if (u.startsWith("http://runs.test/v1/runs/") && u.includes("/costs/")) return ok({});
+      if (u === "http://billing.test/v1/customer_balance/authorize") return ok({ sufficient: true, balance_cents: 1000, required_cents: 1 });
       throw new Error(`unexpected fetch in test: ${u}`);
     })
   );

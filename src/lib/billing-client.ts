@@ -31,6 +31,48 @@ export interface AuthorizeCreditResult {
   sufficient: boolean;
   balance_cents: number;
   required_cents: number;
+  /**
+   * Present ONLY when the campaign's sales funnel MAX BUDGET refused the spend
+   * (`sales_funnel_max_budget_reached` / `sales_funnel_max_budget_unreadable`);
+   * absent on a real balance shortfall.
+   */
+  reason?: string;
+  /** billing-service's cap snapshot, present only with `reason`. Relayed verbatim. */
+  sales_funnel_cap?: unknown;
+}
+
+/**
+ * The 402 body for a refused authorize. A real shortfall (no `reason`) keeps
+ * today's body byte-for-byte. A sales funnel max-budget refusal names the cap
+ * (the org may have credit: adding credit changes nothing) and carries
+ * billing's `reason` + `sales_funnel_cap` verbatim beside the same
+ * balance_cents / required_cents consumers already read.
+ */
+export function creditRefusalBody(
+  auth: AuthorizeCreditResult,
+  what: string
+): Record<string, unknown> {
+  if (!auth.reason) {
+    return {
+      error: `insufficient credit for ${what}`,
+      balance_cents: auth.balance_cents,
+      required_cents: auth.required_cents,
+    };
+  }
+  const label =
+    auth.reason === "sales_funnel_max_budget_reached"
+      ? "Sales funnel max budget reached"
+      : auth.reason === "sales_funnel_max_budget_unreadable"
+        ? "Sales funnel max budget unreadable"
+        : `billing-service refused the spend (${auth.reason})`;
+  const body: Record<string, unknown> = {
+    error: `${label} for ${what}`,
+    balance_cents: auth.balance_cents,
+    required_cents: auth.required_cents,
+    reason: auth.reason,
+  };
+  if (auth.sales_funnel_cap !== undefined) body.sales_funnel_cap = auth.sales_funnel_cap;
+  return body;
 }
 
 export class BillingServiceError extends Error {
