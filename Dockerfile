@@ -3,7 +3,9 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+# pnpm pinned to 9: pnpm 10+ fails the install with ERR_PNPM_IGNORED_BUILDS
+# (esbuild install script not approved). Same pin as the rest of the fleet.
+RUN npm install -g pnpm@9
 
 COPY package.json pnpm-lock.yaml* ./
 
@@ -18,7 +20,7 @@ FROM node:20-slim
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 
 COPY package.json pnpm-lock.yaml* ./
 

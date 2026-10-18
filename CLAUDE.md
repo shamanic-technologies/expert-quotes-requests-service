@@ -9,6 +9,7 @@ Bronze wrapper for journalist quote-request providers. Owns Featured.com mechani
 - `pnpm test:integration` — integration tests only
 - `pnpm run build` — `tsc` + regenerate `openapi.json`
 - `pnpm run dev` — local dev server (`tsx watch`)
+- **Dockerfile pins `pnpm@9`**: an unpinned `npm install -g pnpm` pulled pnpm 10+, which fails the box build with `ERR_PNPM_IGNORED_BUILDS` (blocked deploys 2026-10-16). Never unpin; to move to pnpm 10 add `pnpm.onlyBuiltDependencies` in `package.json` first.
 - `pnpm run generate:openapi` — regenerate `openapi.json` from Zod schemas
 - `pnpm run db:generate` — generate Drizzle migrations
 - `pnpm run db:migrate` — apply migrations
