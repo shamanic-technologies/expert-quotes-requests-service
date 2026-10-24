@@ -197,3 +197,91 @@ export async function updateCostStatus(
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Support marks (runs-service owner door, COST-SUPPORT-1024): a run of ours
+// that serves a support function (spend producing no outcome by design) is
+// marked so its cost stays off every cost per outcome, reported apart per
+// function. The owner door only marks runs of `serviceName`; final and
+// idempotent on runs-service's side (an already marked run keeps its first
+// function), and a run that declared a produced outcome is never marked.
+// ---------------------------------------------------------------------------
+
+export type SupportFunction =
+  | "payment_fees"
+  | "brand_setup"
+  | "copilot"
+  | "platform_llm"
+  | "staff_experiment"
+  | "product_feature"
+  | "retired_product";
+
+export interface SupportMarkRequest {
+  kind: SupportFunction;
+  reason: string;
+  markedBy: string;
+  taskNames?: string[];
+  startedAfter?: string;
+  startedBefore?: string;
+  topLevelOnly?: boolean;
+  withSpendOnly?: boolean;
+}
+
+export interface SupportSelection {
+  matchedRunCount: number;
+  toMarkCount: number;
+  alreadyMarkedCount: number;
+  declaresOutcomesCount: number;
+  onOutcomeNowCount: number;
+  spend: { grossCents: string; netCents: string };
+  maxRuns: number;
+  tooMany: boolean;
+}
+
+export interface SupportMarkResult {
+  markedCount: number;
+  alreadyMarkedCount: number;
+  declaresOutcomesCount?: number;
+}
+
+async function postSupportMarks<T>(
+  action: "preview" | "apply",
+  serviceName: string,
+  body: SupportMarkRequest,
+  fetchImpl: typeof fetch
+): Promise<T> {
+  const { url, apiKey } = getRunsConfig();
+  const path = `/v1/platform-runs/support-marks/${action}`;
+  const response = await fetchImpl(`${url}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "x-service-name": serviceName,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Runs-service POST ${path} failed (${response.status}): ${text}`
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
+export function previewSupportMarks(
+  serviceName: string,
+  body: SupportMarkRequest,
+  fetchImpl: typeof fetch = fetch
+): Promise<SupportSelection> {
+  return postSupportMarks<SupportSelection>("preview", serviceName, body, fetchImpl);
+}
+
+export function applySupportMarks(
+  serviceName: string,
+  body: SupportMarkRequest,
+  fetchImpl: typeof fetch = fetch
+): Promise<SupportMarkResult> {
+  return postSupportMarks<SupportMarkResult>("apply", serviceName, body, fetchImpl);
+}
